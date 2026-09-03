@@ -13,15 +13,14 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Stream;
+import org.xml.sax.InputSource;
 
 /**
  * Service de découverte de projet Maven multi-modules.
@@ -62,6 +61,10 @@ public class MavenProjectDiscoveryService {
 
     public List<ModuleDescriptor> discoverModules(Path projectRoot) {
         List<ModuleDescriptor> modules = new ArrayList<>();
+        if (projectRoot == null) return modules;
+        if (Files.isRegularFile(projectRoot)) {
+            projectRoot = projectRoot.getParent();
+        }
         final Path absProjectRoot = projectRoot.toAbsolutePath().normalize();
         Path rootPom = absProjectRoot.resolve("pom.xml");
 
@@ -101,8 +104,10 @@ public class MavenProjectDiscoveryService {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                     if (file.getFileName() != null && file.getFileName().toString().equalsIgnoreCase("pom.xml")) {
-                        if (!file.equals(absProjectRoot.resolve("pom.xml"))) {
-                            poms.add(file);
+                        Path fileNorm = file.toAbsolutePath().normalize();
+                        Path rootPomNorm = absProjectRoot.resolve("pom.xml").toAbsolutePath().normalize();
+                        if (!fileNorm.equals(rootPomNorm)) {
+                            poms.add(fileNorm);
                         }
                     }
                     return FileVisitResult.CONTINUE;
@@ -117,7 +122,7 @@ public class MavenProjectDiscoveryService {
             for (Path pom : poms) {
                 Path modDir = pom.getParent().toAbsolutePath().normalize();
                 String rel = absProjectRoot.relativize(modDir).toString().replace('\\', '/');
-                boolean alreadyPresent = result.stream().anyMatch(m -> m.relativePath().equals(rel));
+                boolean alreadyPresent = result.stream().anyMatch(m -> m.relativePath().equalsIgnoreCase(rel));
                 if (!alreadyPresent) {
                     log.info("Module Maven découvert par scan automatique : {} ({})", modDir.getFileName(), rel);
                     discoverModuleRecursive(absProjectRoot, pom, modDir, globalProps, managedVersions, result);
@@ -237,11 +242,17 @@ public class MavenProjectDiscoveryService {
             if (Files.exists(profilePom)) return profilePom;
         }
 
-        // 3. Recherche sous projectRoot d'un sous-dossier portant le nom du module
-        try (Stream<Path> walk = Files.walk(projectRoot, 6)) {
+        // 3. Recherche sous projectRoot d'un sous-dossier correspondant au chemin ou au nom de module feuille
+        final String leafName = cleanSub.contains("/") ? cleanSub.substring(cleanSub.lastIndexOf('/') + 1) : cleanSub;
+        try (Stream<Path> walk = Files.walk(projectRoot, 8)) {
             Optional<Path> found = walk
                     .filter(Files::isDirectory)
-                    .filter(dir -> dir.getFileName() != null && dir.getFileName().toString().equalsIgnoreCase(cleanSub))
+                    .filter(dir -> {
+                        String dirName = dir.getFileName() != null ? dir.getFileName().toString() : "";
+                        if (dirName.equalsIgnoreCase(leafName)) return true;
+                        String rel = projectRoot.relativize(dir).toString().replace('\\', '/');
+                        return rel.equalsIgnoreCase(cleanSub) || rel.endsWith("/" + cleanSub);
+                    })
                     .map(dir -> dir.resolve("pom.xml"))
                     .filter(Files::exists)
                     .findFirst();
@@ -450,6 +461,11 @@ public class MavenProjectDiscoveryService {
     }
 
     private Document parseXml(Path xmlPath) throws Exception {
+        byte[] bytes = Files.readAllBytes(xmlPath);
+        return parseXmlBytes(bytes);
+    }
+
+    private Document parseXmlBytes(byte[] bytes) throws Exception {
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
         dbf.setNamespaceAware(false);
         try {
@@ -459,8 +475,24 @@ public class MavenProjectDiscoveryService {
         } catch (Exception ignored) {
         }
         DocumentBuilder db = dbf.newDocumentBuilder();
-        try (InputStream is = new FileInputStream(xmlPath.toFile())) {
-            return db.parse(is);
+
+        // 1. Essayer en UTF-8
+        try {
+            return db.parse(new InputSource(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)));
+        } catch (Exception eUtf8) {
+            // 2. Essayer en ISO-8859-1 (Windows-1252 pour les accents français dans les commentaires/textes)
+            try {
+                return db.parse(new InputSource(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.ISO_8859_1)));
+            } catch (Exception eIso) {
+                // 3. Essayer en nettoyant les esperluettes brutes non échappées
+                try {
+                    String sanitized = new String(bytes, StandardCharsets.UTF_8)
+                            .replaceAll("&(?!(amp|lt|gt|quot|apos|#\\d+|#x[0-9a-fA-F]+);)", "&amp;");
+                    return db.parse(new InputSource(new StringReader(sanitized)));
+                } catch (Exception eSanitized) {
+                    throw eUtf8;
+                }
+            }
         }
     }
 
