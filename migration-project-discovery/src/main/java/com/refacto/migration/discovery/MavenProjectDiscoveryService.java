@@ -60,18 +60,52 @@ public class MavenProjectDiscoveryService {
     public List<ModuleDescriptor> discoverModules(Path projectRoot) {
         List<ModuleDescriptor> modules = new ArrayList<>();
         Path rootPom = projectRoot.resolve("pom.xml");
-        if (!Files.exists(rootPom)) {
-            log.warn("Aucun pom.xml trouvé à la racine : {}", projectRoot);
-            return modules;
-        }
 
         Map<String, String> globalProperties = new HashMap<>();
         Map<String, String> managedVersions = new HashMap<>();
-        discoverModuleRecursive(projectRoot, rootPom, projectRoot, globalProperties, managedVersions, modules);
+
+        if (Files.exists(rootPom)) {
+            discoverModuleRecursive(projectRoot, rootPom, projectRoot, globalProperties, managedVersions, modules);
+        } else {
+            log.info("Aucun pom.xml direct à la racine : {}. Découverte par scan des sous-répertoires.", projectRoot);
+        }
+
+        // Fallback & complément : scanner le système de fichiers pour détecter tous les sous-modules Maven
+        // (gestion des modules déclarés dans des profils Maven ou arborescences non standards)
+        scanFilesystemForMissingModules(projectRoot, globalProperties, managedVersions, modules);
 
         // Resolve inter-module dependencies
         resolveDependentModules(modules);
         return modules;
+    }
+
+    private void scanFilesystemForMissingModules(Path projectRoot, Map<String, String> globalProps,
+                                                Map<String, String> managedVersions, List<ModuleDescriptor> result) {
+        try (Stream<Path> stream = Files.walk(projectRoot, 5)) {
+            List<Path> poms = stream
+                    .filter(p -> Files.isRegularFile(p) && p.getFileName().toString().equals("pom.xml"))
+                    .filter(p -> !p.equals(projectRoot.resolve("pom.xml")))
+                    .filter(p -> {
+                        String s = p.toString().replace('\\', '/');
+                        return !s.contains("/target/") && !s.contains("/.git/") &&
+                               !s.contains("/.idea/") && !s.contains("/.vscode/") &&
+                               !s.contains("/node_modules/") && !s.contains("/.m2/");
+                    })
+                    .sorted()
+                    .toList();
+
+            for (Path pom : poms) {
+                Path modDir = pom.getParent();
+                String rel = projectRoot.relativize(modDir).toString().replace('\\', '/');
+                boolean alreadyPresent = result.stream().anyMatch(m -> m.relativePath().equals(rel));
+                if (!alreadyPresent) {
+                    log.info("Module Maven découvert par scan automatique : {} ({})", modDir.getFileName(), rel);
+                    discoverModuleRecursive(projectRoot, pom, modDir, globalProps, managedVersions, result);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Avertissement lors du scan filesystem des modules : {}", e.getMessage());
+        }
     }
 
     private void discoverModuleRecursive(Path projectRoot, Path pomPath, Path moduleDir,
@@ -141,17 +175,29 @@ public class MavenProjectDiscoveryService {
                     hasJpa
             );
 
-            result.add(module);
+            // Éviter les doublons
+            if (result.stream().noneMatch(m -> m.relativePath().equals(module.relativePath()))) {
+                result.add(module);
+            }
 
-            // Check submodules
-            Element modulesEl = getChildElement(root, "modules");
-            if (modulesEl != null) {
-                NodeList moduleNodes = modulesEl.getElementsByTagName("module");
-                for (int i = 0; i < moduleNodes.getLength(); i++) {
-                    String subModuleName = moduleNodes.item(i).getTextContent().trim();
-                    Path subModuleDir = moduleDir.resolve(subModuleName);
-                    Path subModulePom = subModuleDir.resolve("pom.xml");
-                    if (Files.exists(subModulePom)) {
+            // Découverte récursive de tous les sous-modules déclarés (directs + profils)
+            List<String> declaredModules = extractAllDeclaredModules(root, properties);
+            for (String subModuleName : declaredModules) {
+                String cleanSub = subModuleName.replace('\\', '/').trim();
+                Path subModuleDir;
+                Path subModulePom;
+                if (cleanSub.endsWith(".xml")) {
+                    subModulePom = moduleDir.resolve(cleanSub).normalize();
+                    subModuleDir = subModulePom.getParent();
+                } else {
+                    subModuleDir = moduleDir.resolve(cleanSub).normalize();
+                    subModulePom = subModuleDir.resolve("pom.xml");
+                }
+
+                if (Files.exists(subModulePom)) {
+                    String subRel = projectRoot.relativize(subModuleDir).toString().replace('\\', '/');
+                    boolean alreadyAdded = result.stream().anyMatch(m -> m.relativePath().equals(subRel));
+                    if (!alreadyAdded) {
                         discoverModuleRecursive(projectRoot, subModulePom, subModuleDir, properties, managedVersions, result);
                     }
                 }
@@ -159,6 +205,21 @@ public class MavenProjectDiscoveryService {
         } catch (Exception e) {
             log.error("Erreur lors de la lecture du POM {} : {}", pomPath, e.getMessage());
         }
+    }
+
+    private List<String> extractAllDeclaredModules(Element root, Map<String, String> properties) {
+        List<String> modules = new ArrayList<>();
+        NodeList moduleNodes = root.getElementsByTagName("module");
+        for (int i = 0; i < moduleNodes.getLength(); i++) {
+            String text = moduleNodes.item(i).getTextContent();
+            if (text != null && !text.isBlank()) {
+                String resolved = resolveProperty(text.trim(), properties);
+                if (resolved != null && !resolved.isBlank()) {
+                    modules.add(resolved.trim());
+                }
+            }
+        }
+        return modules;
     }
 
     private void resolveDependentModules(List<ModuleDescriptor> modules) {
@@ -320,9 +381,13 @@ public class MavenProjectDiscoveryService {
 
     private Document parseXml(Path xmlPath) throws Exception {
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-        dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false);
-        dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
-        dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        dbf.setNamespaceAware(false);
+        try {
+            dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false);
+            dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        } catch (Exception ignored) {
+        }
         DocumentBuilder db = dbf.newDocumentBuilder();
         try (InputStream is = new FileInputStream(xmlPath.toFile())) {
             return db.parse(is);
@@ -333,8 +398,11 @@ public class MavenProjectDiscoveryService {
         NodeList list = parent.getChildNodes();
         for (int i = 0; i < list.getLength(); i++) {
             Node n = list.item(i);
-            if (n.getNodeType() == Node.ELEMENT_NODE && n.getNodeName().equals(tagName)) {
-                return (Element) n;
+            if (n.getNodeType() == Node.ELEMENT_NODE) {
+                String name = n.getNodeName();
+                if (name.equals(tagName) || name.endsWith(":" + tagName)) {
+                    return (Element) n;
+                }
             }
         }
         return null;
