@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Java Migration Platform - Control Center</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 900: '#1e3a8a' }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .diff-del { background-color: #fee2e2; color: #991b1b; }
+        .diff-add { background-color: #dcfce7; color: #166534; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; font-weight: 600; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
+
+    <!-- Top Navigation -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 text-white p-2 rounded-lg shadow-sm">
+                    <i data-lucide="layers" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-900 leading-tight">Migration Control Center</h1>
+                    <p class="text-xs text-slate-500">Analyze &bull; Explain &bull; Plan &bull; Transform &bull; Validate</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2 text-sm bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                    <span class="text-slate-500">Projet actif :</span>
+                    <span id="activeProjectLabel" class="font-semibold text-slate-800">Aucun projet sélectionné</span>
+                </div>
+                <button onclick="openImportModal()" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
+                    <i data-lucide="folder-plus" class="w-4 h-4"></i>
+                    <span>Importer / Analyser</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex space-x-8 text-sm border-t border-slate-100 overflow-x-auto">
+            <button onclick="switchTab('dashboard')" id="tab-dashboard" class="py-3 px-1 tab-active flex items-center space-x-2">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                <span>Dashboard Exécutif</span>
+            </button>
+            <button onclick="switchTab('modules')" id="tab-modules" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
+                <i data-lucide="box" class="w-4 h-4"></i>
+                <span>Modules & Batchs</span>
+            </button>
+            <button onclick="switchTab('dependencies')" id="tab-dependencies" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
+                <i data-lucide="git-merge" class="w-4 h-4"></i>
+                <span>Matrice Dépendances</span>
+            </button>
+            <button onclick="switchTab('findings')" id="tab-findings" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
+                <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                <span>Findings (<span id="findingsCountBadge">0</span>)</span>
+            </button>
+            <button onclick="switchTab('recipes')" id="tab-recipes" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
+                <i data-lucide="book-open" class="w-4 h-4"></i>
+                <span>Catalogue Recipes</span>
+            </button>
+            <button onclick="switchTab('planner')" id="tab-planner" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
+                <i data-lucide="calendar" class="w-4 h-4"></i>
+                <span>Migration Waves (DAG)</span>
+            </button>
+            <button onclick="switchTab('diffs')" id="tab-diffs" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
+                <i data-lucide="file-diff" class="w-4 h-4"></i>
+                <span>Dry Run & Diffs</span>
+            </button>
+            <button onclick="switchTab('architecture')" id="tab-architecture" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
+                <i data-lucide="network" class="w-4 h-4"></i>
+                <span>Couplage Architecture</span>
+            </button>
+            <button onclick="switchTab('performance')" id="tab-performance" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
+                <i data-lucide="gauge" class="w-4 h-4"></i>
+                <span>Validation & Performance</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- 1. DASHBOARD VIEW -->
+        <section id="view-dashboard" class="space-y-6">
+            <!-- Assessment Header Card -->
+            <div class="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-6 shadow-md flex flex-col md:flex-row items-center justify-between gap-6">
+                <div>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-400/30 mb-2">
+                        Application Assessment &bull; Profil Java 17 + Spring Boot 3
+                    </span>
+                    <h2 class="text-2xl font-bold text-white">Diagnostic Global de Migration</h2>
+                    <p id="dashSummaryText" class="text-slate-300 text-sm mt-1 max-w-2xl">
+                        Importez un projet Java ou chargez une analyse pour visualiser les modules, l'inventaire des dépendances, les findings techniques et le score de risque global.
+                    </p>
+                </div>
+
+                <div class="flex items-center space-x-4 bg-slate-800/80 border border-slate-700 p-4 rounded-xl">
+                    <div class="text-center">
+                        <div class="text-xs text-slate-400 uppercase font-bold tracking-wider">Migration Risk</div>
+                        <div id="riskScoreValue" class="text-4xl font-extrabold text-amber-400 mt-1">--</div>
+                        <div id="riskScoreLevel" class="text-xs font-semibold uppercase mt-0.5 text-slate-300">N/A</div>
+                    </div>
+                    <div class="w-24 h-24 flex items-center justify-center">
+                        <i data-lucide="shield-alert" class="w-12 h-12 text-amber-400"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI Counters -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase">Modules</div>
+                    <div id="kpiModules" class="text-2xl font-bold text-slate-900 mt-1">0</div>
+                    <div class="text-xs text-slate-400 mt-1">Maven découverts</div>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase">Batch Jobs</div>
+                    <div id="kpiBatches" class="text-2xl font-bold text-slate-900 mt-1">0</div>
+                    <div class="text-xs text-slate-400 mt-1">Spring Batch</div>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase">Fichiers Java</div>
+                    <div id="kpiFiles" class="text-2xl font-bold text-slate-900 mt-1">0</div>
+                    <div class="text-xs text-slate-400 mt-1">Sources analysées</div>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase">Dépendances</div>
+                    <div id="kpiDeps" class="text-2xl font-bold text-slate-900 mt-1">0</div>
+                    <div class="text-xs text-amber-600 mt-1"><span id="kpiDepsUpgrade">0</span> à migrer</div>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase">Breaking APIs</div>
+                    <div id="kpiBreaking" class="text-2xl font-bold text-red-600 mt-1">0</div>
+                    <div class="text-xs text-slate-400 mt-1">Points de rupture</div>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="text-xs font-semibold text-slate-500 uppercase">Findings</div>
+                    <div id="kpiFindings" class="text-2xl font-bold text-blue-600 mt-1">0</div>
+                    <div class="text-xs text-slate-400 mt-1">Règles déclenchées</div>
+                </div>
+            </div>
+
+            <!-- Findings by Category & Risk Factors Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Findings Breakdown -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-900 text-base mb-4 flex items-center justify-between">
+                        <span>Répartition des Findings par Catégorie</span>
+                        <span class="text-xs text-slate-400 font-normal">Section 46 du cahier des charges</span>
+                    </h3>
+                    <div class="space-y-3" id="categoryBreakdownList">
+                        <div class="text-sm text-slate-400">Aucune analyse active.</div>
+                    </div>
+                </div>
+
+                <!-- Risk Factors Explainability -->
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-900 text-base mb-4 flex items-center justify-between">
+                        <span>Explicabilité du Score de Risque</span>
+                        <span class="text-xs text-slate-400 font-normal">Section 38</span>
+                    </h3>
+                    <div id="riskFactorsList" class="space-y-3">
+                        <div class="text-sm text-slate-400">Facteurs de risque non calculés.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Report Export Bar -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <i data-lucide="file-text" class="w-5 h-5 text-blue-600"></i>
+                    <span class="text-sm font-semibold text-slate-800">Export du Rapport Complet de Migration (Section 65)</span>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button onclick="downloadReport('html')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg border border-slate-200 transition flex items-center space-x-1.5">
+                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                        <span>Visualiser HTML</span>
+                    </button>
+                    <button onclick="downloadReport('markdown')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg border border-slate-200 transition flex items-center space-x-1.5">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        <span>Markdown</span>
+                    </button>
+                    <button onclick="downloadReport('json')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg border border-slate-200 transition flex items-center space-x-1.5">
+                        <i data-lucide="code" class="w-3.5 h-3.5"></i>
+                        <span>JSON</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. MODULES & BATCHS VIEW -->
+        <section id="view-modules" class="space-y-6 hidden">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-900 text-lg mb-2">Inventaire des Modules & Batchs Découverts</h3>
+                <p class="text-xs text-slate-500 mb-4">Identification automatique des sous-modules Maven, versions Java détectées et hiérarchie Spring Batch (Job, Step, Chunk, Tasklet).</p>
+                <div id="modulesContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="text-sm text-slate-400">Aucun module chargé.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. DEPENDENCIES MATRIX VIEW -->
+        <section id="view-dependencies" class="space-y-6 hidden">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">Matrice des Dépendances & Conflits</h3>
+                        <p class="text-xs text-slate-500">Comparaison Current Version vs Target Version, détection des conflits inter-modules (Section 12 & 48).</p>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Dépendance (GroupId:ArtifactId)</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Version Actuelle</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Version Cible</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Modules Consommateurs</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Conflit</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Statut Migration</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dependenciesTableBody" class="divide-y divide-slate-200">
+                            <tr><td colspan="6" class="px-4 py-6 text-center text-slate-400">Aucune dépendance.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. FINDINGS VIEW -->
+        <section id="view-findings" class="space-y-6 hidden">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">Inspecteur de Findings Techniques</h3>
+                        <p class="text-xs text-slate-500">Règles déclenchées, niveaux d'automatisation, explicabilité et actions recommandées.</p>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="flex items-center space-x-3 text-xs">
+                        <select id="filterCategory" onchange="filterFindings()" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg">
+                            <option value="">Toutes catégories</option>
+                            <option value="DATABASE">Base de données (APP-DB)</option>
+                            <option value="CODE">Modernisation Code (APP-CODE)</option>
+                            <option value="ARCHITECTURE">Architecture (APP-ARCH)</option>
+                            <option value="JAVA17">Java 17 Modernisation</option>
+                            <option value="FRAMEWORK">Frameworks</option>
+                        </select>
+                        <select id="filterSeverity" onchange="filterFindings()" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg">
+                            <option value="">Toutes sévérités</option>
+                            <option value="CRITICAL">CRITICAL</option>
+                            <option value="HIGH">HIGH</option>
+                            <option value="MEDIUM">MEDIUM</option>
+                            <option value="LOW">LOW</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="findingsList" class="space-y-4">
+                    <div class="text-sm text-slate-400">Aucun finding à afficher.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. RECIPES CATALOG VIEW -->
+        <section id="view-recipes" class="space-y-6 hidden">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-900 text-lg mb-2">Catalogue de Recipes & Packs de Migration</h3>
+                <p class="text-xs text-slate-500 mb-6">Packs standardisés et règles de transformation déclaratives (Sections 18, 19, 20 & 50).</p>
+                <div id="recipesContainer" class="space-y-6">
+                    <div class="text-sm text-slate-400">Chargement des packs...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 6. MIGRATION PLANNER (DAG WAVES) VIEW -->
+        <section id="view-planner" class="space-y-6 hidden">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">Séquencement des Vagues de Migration (DAG)</h3>
+                        <p class="text-xs text-slate-500">Ordonnancement calculé selon les dépendances entre recipes (Section 21 & 37).</p>
+                    </div>
+                    <span class="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-semibold border border-emerald-200">
+                        Topologie Acyclique Validée (0 cycle)
+                    </span>
+                </div>
+
+                <div id="wavesContainer" class="space-y-4">
+                    <div class="text-sm text-slate-400">Génération du plan de vagues...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 7. DRY RUN & DIFFS VIEW -->
+        <section id="view-diffs" class="space-y-6 hidden">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">Dry Run & Revue Humaine des Diffs</h3>
+                        <p class="text-xs text-slate-500">Visualisez les propositions de transformations sans altérer le code d'origine (Sections 39 & 40).</p>
+                    </div>
+                    <button onclick="applyAllApproved()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition flex items-center space-x-2">
+                        <i data-lucide="check-check" class="w-4 h-4"></i>
+                        <span>Appliquer les transformations sûres & approuvées</span>
+                    </button>
+                </div>
+
+                <div id="diffsList" class="space-y-6">
+                    <div class="text-sm text-slate-400">Aucun diff généré.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 8. ARCHITECTURE COUPLING VIEW -->
+        <section id="view-architecture" class="space-y-6 hidden">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h3 class="font-bold text-slate-900 text-lg mb-2">Cartographie des Couplages Transverses & Éligibilité APP-commons</h3>
+                <p class="text-xs text-slate-500 mb-6">Visualisation interactive des DAOs, Entités et Services partagés entre plusieurs batchs (Sections 34, 35, 51).</p>
+                <div id="couplingsContainer" class="space-y-4">
+                    <div class="text-sm text-slate-400">Aucun couplage transverse détecté.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 9. PERFORMANCE & VALIDATION VIEW -->
+        <section id="view-performance" class="space-y-6 hidden">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">Double Validation : Performance & Non-Régression Fonctionnelle</h3>
+                        <p class="text-xs text-slate-500">Comparaison systématique avant / après sur volumétrie représentative (Sections 43, 44, 45).</p>
+                    </div>
+                    <button onclick="runBuildValidation()" class="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition flex items-center space-x-2">
+                        <i data-lucide="play" class="w-4 h-4"></i>
+                        <span>Lancer Validation Compilation & Tests</span>
+                    </button>
+                </div>
+
+                <div id="validationResultCard" class="mb-6 p-4 rounded-xl border border-slate-200 bg-slate-50">
+                    <div class="text-xs font-bold text-slate-500 uppercase">Dernier Statut de Build</div>
+                    <div id="buildStatusBadge" class="text-base font-semibold text-slate-800 mt-1">Non exécuté</div>
+                </div>
+
+                <h4 class="font-semibold text-slate-800 text-sm mb-3">Comparaisons de Performance des Traitements Batch</h4>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-slate-200 text-sm">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Batch Job</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Volume Traité</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Temps Avant</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Temps Après</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Gain Mesuré (%)</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Validation Fonctionnelle</th>
+                                <th class="px-4 py-3 text-left font-semibold text-slate-600">Statut Global</th>
+                            </tr>
+                        </thead>
+                        <tbody id="performanceTableBody" class="divide-y divide-slate-200">
+                            <tr><td colspan="7" class="px-4 py-6 text-center text-slate-400">Aucune donnée de baseline disponible.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Import Project Modal -->
+    <div id="importModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-lg mb-2">Analyser un Projet Java</h3>
+            <p class="text-xs text-slate-500 mb-4">Saisissez le chemin local du projet multi-modules à analyser.</p>
+
+            <div class="space-y-4 text-sm">
+                <div>
+                    <label class="block font-medium text-slate-700 mb-1">Nom du projet</label>
+                    <input type="text" id="importProjectName" value="Sample Legacy APP" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block font-medium text-slate-700 mb-1">Répertoire local du projet</label>
+                    <input type="text" id="importProjectPath" value="d:/work/sample/refacto/sample-legacy-app" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block font-medium text-slate-700 mb-1">Branche source</label>
+                    <input type="text" id="importBranch" value="main" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                </div>
+            </div>
+
+            <div class="mt-6 flex items-center justify-end space-x-3">
+                <button onclick="closeImportModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium">Annuler</button>
+                <button onclick="startAnalysis()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition flex items-center space-x-1.5">
+                    <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                    <span>Lancer l'analyse complète</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Explanation Modal -->
+    <div id="aiModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl p-6 max-w-2xl w-full shadow-xl border border-slate-200 max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+                <div class="flex items-center space-x-2">
+                    <div class="p-1.5 bg-purple-100 text-purple-700 rounded-lg">
+                        <i data-lucide="bot" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-900 text-base">Assistant IA - Explication Technique & Risque</h3>
+                </div>
+                <button onclick="closeAiModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div id="aiContent" class="py-4 overflow-y-auto text-sm text-slate-700 space-y-3 prose max-w-none">
+                Chargement...
+            </div>
+            <div class="pt-3 border-t border-slate-100 flex justify-end">
+                <button onclick="closeAiModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- App JavaScript Logic -->
+    <script>
+        let currentAnalysis = null;
+        let activeTab = 'dashboard';
+
+        function switchTab(tabId) {
+            activeTab = tabId;
+            document.querySelectorAll('main > section').forEach(sec => sec.classList.add('hidden'));
+            document.querySelectorAll('header div.flex button').forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('text-slate-500');
+            });
+
+            const sec = document.getElementById('view-' + tabId);
+            const tabBtn = document.getElementById('tab-comb' + tabId) || document.getElementById('tab-' + tabId);
+            if (sec) sec.classList.remove('hidden');
+            if (tabBtn) {
+                tabBtn.classList.add('tab-active');
+                tabBtn.classList.remove('text-slate-500');
+            }
+            lucide.createIcons();
+        }
+
+        function openImportModal() { document.getElementById('importModal').classList.remove('hidden'); }
+        function closeImportModal() { document.getElementById('importModal').classList.add('hidden'); }
+        function closeAiModal() { document.getElementById('aiModal').classList.add('hidden'); }
+
+        async function startAnalysis() {
+            const name = document.getElementById('importProjectName').value;
+            const path = document.getElementById('importProjectPath').value;
+            const branch = document.getElementById('importBranch').value;
+
+            closeImportModal();
+
+            try {
+                // 1. Create project
+                const projRes = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, repositoryPath: path, branch })
+                });
+                const project = await projRes.json();
+
+                // 2. Launch analysis
+                const anaRes = await fetch(`/api/projects/${project.id}/analyses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(null)
+                });
+                const analysis = await anaRes.json();
+                loadAnalysis(analysis);
+            } catch (err) {
+                alert("Erreur lors de l'analyse : " + err.message);
+            }
+        }
+
+        function loadAnalysis(data) {
+            currentAnalysis = data;
+            document.getElementById('activeProjectLabel').innerText = data.project.name + ' (' + data.snapshot.detectedJavaVersion + ')';
+            document.getElementById('findingsCountBadge').innerText = data.findings.length;
+
+            // Update KPIs
+            document.getElementById('kpiModules').innerText = data.modules.length;
+            document.getElementById('kpiBatches').innerText = data.batches.length;
+            document.getElementById('kpiFiles').innerText = data.modules.reduce((acc, m) => acc + m.sourceCount, 0);
+            document.getElementById('kpiDeps').innerText = data.dependencies.length;
+            document.getElementById('kpiDepsUpgrade').innerText = data.dependencies.filter(d => d.migrationStatus !== 'UP_TO_DATE').length;
+            document.getElementById('kpiBreaking').innerText = data.dependencies.reduce((acc, d) => acc + d.breakingChangeCount, 0);
+            document.getElementById('kpiFindings').innerText = data.findings.length;
+
+            // Risk
+            const riskVal = document.getElementById('riskScoreValue');
+            const riskLvl = document.getElementById('riskScoreLevel');
+            riskVal.innerText = data.riskAssessment.score + '/100';
+            riskLvl.innerText = data.riskAssessment.level;
+            document.getElementById('dashSummaryText').innerText = data.riskAssessment.summary;
+
+            // Render views
+            renderCategoryBreakdown(data.findings);
+            renderRiskFactors(data.riskAssessment.factors);
+            renderModules(data.modules, data.batches);
+            renderDependencies(data.dependencies);
+            renderFindings(data.findings);
+            renderWaves(data.waves);
+            renderDiffs(data.dryRunResult);
+            renderArchitecture(data.architectureCouplings);
+            loadRecipes();
+
+            lucide.createIcons();
+        }
+
+        function renderCategoryBreakdown(findings) {
+            const counts = {};
+            findings.forEach(f => { counts[f.category] = (counts[f.category] || 0) + 1; });
+
+            const container = document.getElementById('categoryBreakdownList');
+            container.innerHTML = Object.entries(counts).map(([cat, count]) => `
+                <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                    <span class="font-semibold text-slate-700 text-xs">${cat}</span>
+                    <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800">${count}</span>
+                </div>
+            `).join('') || '<div class="text-xs text-slate-400">Aucun finding.</div>';
+        }
+
+        function renderRiskFactors(factors) {
+            const container = document.getElementById('riskFactorsList');
+            container.innerHTML = factors.map(f => `
+                <div class="p-3 rounded-lg bg-amber-50/50 border border-amber-200">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-xs text-amber-900">${f.category} (+${f.scoreContribution} pts)</span>
+                        <span class="text-[10px] text-amber-700 uppercase font-semibold">Poids : ${f.weight}</span>
+                    </div>
+                    <div class="text-xs text-slate-700 mt-1">${f.description}</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5 italic">${f.impactDetails}</div>
+                </div>
+            `).join('') || '<div class="text-xs text-slate-400">Aucun facteur majeur.</div>';
+        }
+
+        function renderModules(modules, batches) {
+            const container = document.getElementById('modulesContainer');
+            container.innerHTML = modules.map(m => {
+                const modBatches = batches.filter(b => b.moduleName === m.artifactId);
+                return `
+                <div class="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-slate-900">${m.name}</span>
+                        <span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded font-semibold">Java ${m.javaVersion}</span>
+                    </div>
+                    <div class="text-xs text-slate-500 mb-3">${m.groupId}:${m.artifactId}:${m.version} &bull; ${m.sourceCount} classes &bull; ${m.testCount} tests</div>
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        ${Array.from(m.frameworks).map(f => `<span class="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-[11px]">${f}</span>`).join('')}
+                    </div>
+                    ${modBatches.length > 0 ? `
+                        <div class="mt-3 pt-3 border-t border-slate-200">
+                            <div class="text-xs font-bold text-slate-700 mb-1.5 flex items-center space-x-1">
+                                <i data-lucide="play-circle" class="w-3.5 h-3.5 text-blue-600"></i>
+                                <span>Jobs Spring Batch (${modBatches.length})</span>
+                            </div>
+                            <div class="space-y-1">
+                                ${modBatches.map(b => `
+                                    <div class="text-xs bg-white p-2 rounded border border-slate-200">
+                                        <div class="font-semibold text-slate-800">${b.jobName}</div>
+                                        <div class="text-[11px] text-slate-500 mt-0.5">Steps: ${b.steps.map(s => s.stepName + ' (' + s.stepType + ')').join(' &rarr; ')}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `}).join('');
+        }
+
+        function renderDependencies(dependencies) {
+            const tbody = document.getElementById('dependenciesTableBody');
+            tbody.innerHTML = dependencies.map(d => `
+                <tr class="hover:bg-slate-50">
+                    <td class="px-4 py-3 font-medium text-slate-900">${d.groupId}:${d.artifactId}</td>
+                    <td class="px-4 py-3 text-slate-600"><code>${d.currentVersion}</code></td>
+                    <td class="px-4 py-3 text-blue-600 font-semibold"><code>${d.targetVersion}</code></td>
+                    <td class="px-4 py-3 text-slate-500 text-xs">${d.modules.join(', ')}</td>
+                    <td class="px-4 py-3">
+                        ${d.conflict ? '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-bold">OUI</span>' : '<span class="text-slate-400 text-xs">Non</span>'}
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${d.migrationStatus === 'BREAKING_MIGRATION' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}">
+                            ${d.migrationStatus} (${d.breakingChangeCount} breaking)
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderFindings(findings) {
+            const container = document.getElementById('findingsList');
+            container.innerHTML = findings.map(f => {
+                const sevColor = f.severity === 'CRITICAL' ? 'border-l-red-600 text-red-600' :
+                        (f.severity === 'HIGH' ? 'border-l-orange-500 text-orange-600' : 'border-l-amber-500 text-amber-600');
+
+                return `
+                <div class="p-4 rounded-xl border border-slate-200 border-l-4 ${sevColor} bg-white shadow-sm space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-mono">${f.recipeId}</span>
+                            <span class="text-xs font-semibold uppercase px-2 py-0.5 rounded ${f.severity === 'HIGH' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}">${f.severity}</span>
+                            <span class="text-xs text-slate-500 font-mono">${f.automationLevel} &bull; Confiance: ${f.confidence}%</span>
+                        </div>
+                        <button onclick='askAiAboutFinding(${JSON.stringify(f)})' class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 flex items-center space-x-1">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                            <span>Expliquer avec l'IA</span>
+                        </button>
+                    </div>
+
+                    <div class="font-semibold text-slate-800 text-sm">${f.description}</div>
+                    <div class="text-xs text-slate-500 flex items-center space-x-2">
+                        <span>Fichier :</span>
+                        <code class="text-slate-700 bg-slate-100 px-1 py-0.5 rounded">${f.filePath}:${f.startLine}</code>
+                        ${f.potentialRoundTrips ? `<span class="text-red-600 font-semibold">&bull; ~${f.potentialRoundTrips} round-trips estimés</span>` : ''}
+                    </div>
+
+                    <div class="p-2.5 bg-slate-50 rounded-lg text-xs border border-slate-200 space-y-1">
+                        <div><strong class="text-slate-700">Raison technique :</strong> ${f.technicalReason}</div>
+                        <div><strong class="text-blue-700">Action recommandée :</strong> ${f.suggestedAction}</div>
+                    </div>
+
+                    ${f.codeSnippet ? `
+                        <pre class="bg-slate-900 text-slate-100 p-2.5 rounded-lg text-xs overflow-x-auto font-mono">${f.codeSnippet}</pre>
+                    ` : ''}
+                </div>
+            `}).join('');
+        }
+
+        async function loadRecipes() {
+            try {
+                const res = await fetch('/api/recipes/packs');
+                const packs = await res.json();
+                const container = document.getElementById('recipesContainer');
+                container.innerHTML = packs.map(p => `
+                    <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-bold text-slate-900 text-sm">${p.name}</h4>
+                            <span class="text-xs font-semibold px-2 py-0.5 bg-blue-100 text-blue-700 rounded">v${p.version}</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-3">${p.description}</p>
+                        <div class="flex flex-wrap gap-1.5">
+                            ${p.recipeIds.map(rid => `<span class="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-mono text-slate-700 font-semibold">${rid}</span>`).join('')}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (ignored) {}
+        }
+
+        function renderWaves(waves) {
+            const container = document.getElementById('wavesContainer');
+            container.innerHTML = waves.map(w => `
+                <div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+                            ${w.index}
+                        </div>
+                        <div>
+                            <div class="font-bold text-slate-900 text-sm">${w.description}</div>
+                            <div class="text-xs text-slate-500">${w.recipeExecutions.length} recipes ordonnancées</div>
+                        </div>
+                    </div>
+                    <span class="text-xs px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full font-medium">READY</span>
+                </div>
+            `).join('');
+        }
+
+        function renderDiffs(dryRun) {
+            const container = document.getElementById('diffsList');
+            if (!dryRun || !dryRun.diffEntries || dryRun.diffEntries.length === 0) {
+                container.innerHTML = '<div class="text-sm text-slate-400">Aucun changement en attente.</div>';
+                return;
+            }
+
+            container.innerHTML = dryRun.diffEntries.map(d => `
+                <div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="text-xs font-bold text-blue-600 font-mono">${d.recipeId}</span>
+                            <h4 class="font-semibold text-slate-900 text-sm">${d.filePath}</h4>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs px-2 py-0.5 rounded font-semibold ${d.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}">${d.status}</span>
+                            <button onclick="approveDiff('${d.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold">Approuver</button>
+                            <button onclick="rejectDiff('${d.id}')" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold">Rejeter</button>
+                        </div>
+                    </div>
+                    <pre class="bg-slate-900 text-slate-100 p-3 rounded-lg text-xs font-mono overflow-x-auto">${d.unifiedDiff}</pre>
+                </div>
+            `).join('');
+        }
+
+        function renderArchitecture(couplings) {
+            const container = document.getElementById('couplingsContainer');
+            if (!couplings || couplings.length === 0) {
+                container.innerHTML = '<div class="text-sm text-slate-400">Aucun composant fortement couplé.</div>';
+                return;
+            }
+
+            container.innerHTML = couplings.map(c => `
+                <div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-slate-900 text-sm">${c.componentName}</span>
+                            <span class="text-xs px-2 py-0.5 bg-slate-100 text-slate-700 rounded font-mono">${c.componentType}</span>
+                        </div>
+                        <span class="text-xs px-2 py-0.5 rounded-full font-bold ${c.couplingLevel === 'HIGH' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}">
+                            Couplage ${c.couplingLevel}
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-600 mb-2">
+                        Utilisé par les batchs : <strong>${c.consumerBatchJobs.join(', ') || 'Multiples modules'}</strong>
+                    </div>
+                    <div class="text-xs p-2 rounded bg-slate-50 border border-slate-200 text-slate-700">
+                        <strong>Recommandation :</strong> ${c.recommendation}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function approveDiff(diffId) {
+            if (!currentAnalysis) return;
+            await fetch(`/api/analyses/${currentAnalysis.analysisId}/diffs/${diffId}/approve`, { method: 'POST' });
+            refreshDiffs();
+        }
+
+        async function rejectDiff(diffId) {
+            if (!currentAnalysis) return;
+            const reason = prompt("Raison du rejet :");
+            if (reason) {
+                await fetch(`/api/analyses/${currentAnalysis.analysisId}/diffs/${diffId}/reject`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason })
+                });
+                refreshDiffs();
+            }
+        }
+
+        async function applyAllApproved() {
+            if (!currentAnalysis) return;
+            const res = await fetch(`/api/analyses/${currentAnalysis.analysisId}/apply?applyAutoSafe=true`, { method: 'POST' });
+            alert("Transformations appliquées avec succès sur le disque !");
+            refreshDiffs();
+        }
+
+        async function refreshDiffs() {
+            const res = await fetch(`/api/analyses/${currentAnalysis.analysisId}/dry-run`);
+            const dryRun = await res.json();
+            renderDiffs(dryRun);
+        }
+
+        async function runBuildValidation() {
+            if (!currentAnalysis) return;
+            document.getElementById('buildStatusBadge').innerText = "Exécution Maven en cours...";
+            try {
+                const res = await fetch(`/api/analyses/${currentAnalysis.analysisId}/validate?runTests=true`, { method: 'POST' });
+                const val = await res.json();
+                document.getElementById('buildStatusBadge').innerText = val.summaryMessage;
+                document.getElementById('buildStatusBadge').className = val.overallStatus === 'PASS' ? 'text-emerald-600 font-bold' : 'text-red-600 font-bold';
+            } catch (e) {
+                document.getElementById('buildStatusBadge').innerText = "Erreur validation : " + e.message;
+            }
+        }
+
+        async function askAiAboutFinding(finding) {
+            document.getElementById('aiModal').classList.remove('hidden');
+            document.getElementById('aiContent').innerText = "Interrogation de l'assistant IA...";
+            try {
+                const res = await fetch('/api/ai/explain-finding', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(finding)
+                });
+                const data = await res.json();
+                document.getElementById('aiContent').innerHTML = data.explanation.replace(/\n/g, '<br>');
+            } catch (err) {
+                document.getElementById('aiContent').innerText = "Erreur IA : " + err.message;
+            }
+        }
+
+        function downloadReport(format) {
+            if (!currentAnalysis) {
+                alert("Veuillez d'abord lancer une analyse.");
+                return;
+            }
+            window.open(`/api/analyses/${currentAnalysis.analysisId}/report/${format}`, '_blank');
+        }
+
+        // Initialize icons on load
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

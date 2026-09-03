@@ -1,0 +1,32 @@
+id: APP-Modernization
+name: Pack Modernisation du Code APP
+version: "1.0"
+description: Respect du Single Responsibility Principle et du niveau d'abstraction
+recipes:
+  - id: APP-CODE-001
+    version: "1.0"
+    name: Single Responsibility Principle (SRP)
+    category: CODE
+    severity: HIGH
+    detectorEngine: AST
+    automationLevel: MANUAL_ONLY
+    dependsOn: []
+    validation: [compilation, unit-tests, integration-tests]
+    tags: [architecture, srp, clean-code]
+    status: APPROVED
+    author: APP Architecture
+    rationale: Décomposer les classes cumulant persistance, règles métier et flux I/O.
+
+  - id: APP-CODE-002
+    version: "1.0"
+    name: Niveau d'abstraction dans les composants Batch
+    category: CODE
+    severity: MEDIUM
+    detectorEngine: AST
+    automationLevel: REVIEW_REQUIRED
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [batch, spring-batch, abstraction]
+    status: APPROVED
+    author: APP Architecture
+    rationale: Conserver une méthode principale d'orchestration lisible et déléguer les détails.

@@ -1,0 +1,46 @@
+id: Frameworks-Upgrade
+name: Pack Frameworks (Spring Boot 3 / Batch 5 / JUnit 5)
+version: "1.0"
+description: Montées de version majeures de frameworks et passage jakarta
+recipes:
+  - id: FRAMEWORK-001
+    version: "1.0"
+    name: Migration javax.persistence vers jakarta.persistence
+    category: FRAMEWORK
+    severity: HIGH
+    detectorEngine: OPENREWRITE
+    automationLevel: AUTO_SAFE
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [jakarta, jpa, hibernate6, spring3]
+    status: APPROVED
+    author: Spring Team
+    rationale: Renommage déterministe du namespace javax vers jakarta pour Spring Boot 3 et Hibernate 6.
+
+  - id: FRAMEWORK-002
+    version: "1.0"
+    name: Migration Spring Batch 4 vers Spring Batch 5
+    category: FRAMEWORK
+    severity: HIGH
+    detectorEngine: AST
+    automationLevel: AUTO_WITH_TESTS
+    dependsOn: [FRAMEWORK-001]
+    validation: [compilation, unit-tests, integration-tests]
+    tags: [spring-batch, job-builder]
+    status: APPROVED
+    author: Spring Team
+    rationale: Remplacement de JobBuilderFactory et StepBuilderFactory obsolètes.
+
+  - id: FRAMEWORK-003
+    version: "1.0"
+    name: Migration JUnit 4 vers JUnit 5 Jupiter
+    category: FRAMEWORK
+    severity: MEDIUM
+    detectorEngine: OPENREWRITE
+    automationLevel: AUTO_SAFE
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [junit5, tests]
+    status: APPROVED
+    author: Testing Team
+    rationale: Migration des annotations de test @Test, @Before, @After.

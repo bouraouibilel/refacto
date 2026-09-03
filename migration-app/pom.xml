@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.refacto.migration</groupId>
+        <artifactId>migration-platform-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>migration-app</artifactId>
+    <name>Migration App (Spring Boot)</name>
+    <description>Application Spring Boot exécutant la plateforme de migration</description>
+
+    <dependencies>
+        <!-- Internal modules -->
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-core-model</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-project-discovery</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-dependency-analyzer</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-code-analyzer</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-sql-analyzer</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-recipe-engine</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-transformation-engine</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-validation-engine</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-performance-engine</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-reporting-engine</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.refacto.migration</groupId>
+            <artifactId>migration-ai-assistant</artifactId>
+        </dependency>
+
+        <!-- Spring Boot starters -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
+        <!-- H2 Database for local persistence -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

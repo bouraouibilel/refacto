@@ -1,0 +1,102 @@
+id: Java17
+name: Pack Modernisation Java 17
+version: "1.0"
+description: Recipes de modernisation du code Java vers les standards Java 17 LTS
+recipes:
+  - id: JAVA17-001
+    version: "1.0"
+    name: Conversion try-finally vers try-with-resources
+    category: JAVA17
+    severity: MEDIUM
+    detectorEngine: AST
+    automationLevel: AUTO_SAFE
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [java17, resources, clean-code]
+    status: APPROVED
+    author: Java Platform
+    rationale: Gestion automatique de la fermeture des ressources AutoCloseable.
+
+  - id: JAVA17-002
+    version: "1.0"
+    name: Migration java.io.File vers java.nio.file.Path et Files
+    category: JAVA17
+    severity: LOW
+    detectorEngine: AST
+    automationLevel: AUTO_SAFE
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [java17, nio, io]
+    status: APPROVED
+    author: Java Platform
+    rationale: Modernisation de la manipulation des fichiers.
+
+  - id: JAVA17-003
+    version: "1.0"
+    name: Boucles vers Stream API avec garde-fou de lisibilité
+    category: JAVA17
+    severity: LOW
+    detectorEngine: AST
+    automationLevel: REVIEW_REQUIRED
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [java17, stream, readability]
+    status: APPROVED
+    author: Java Platform
+    rationale: Conserver une boucle classique si le Stream devient complexe.
+
+  - id: JAVA17-004
+    version: "1.0"
+    name: Switch expressions Java 17
+    category: JAVA17
+    severity: LOW
+    detectorEngine: AST
+    automationLevel: AUTO_SAFE
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [java17, switch]
+    status: APPROVED
+    author: Java Platform
+    rationale: Remplacer les switchs verbeux par des switch expressions.
+
+  - id: JAVA17-005
+    version: "1.0"
+    name: Classes anonymes vers Lambdas
+    category: JAVA17
+    severity: LOW
+    detectorEngine: AST
+    automationLevel: AUTO_SAFE
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [java17, lambda]
+    status: APPROVED
+    author: Java Platform
+    rationale: Remplacement déterministe des interfaces fonctionnelles.
+
+  - id: JAVA17-006
+    version: "1.0"
+    name: Lambdas vers Method References
+    category: JAVA17
+    severity: LOW
+    detectorEngine: AST
+    automationLevel: AUTO_SAFE
+    dependsOn: [JAVA17-005]
+    validation: [compilation, unit-tests]
+    tags: [java17, method-ref]
+    status: APPROVED
+    author: Java Platform
+    rationale: Syntaxe concise pour les appels de méthodes.
+
+  - id: JAVA17-007
+    version: "1.0"
+    name: Null Safety & Interdiction Optional JPA
+    category: JAVA17
+    severity: HIGH
+    detectorEngine: AST
+    automationLevel: REVIEW_REQUIRED
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [java17, null-safety, jpa]
+    status: APPROVED
+    author: APP Migration
+    rationale: Interdire Optional comme attribut persistant JPA et sécuriser les frontières.

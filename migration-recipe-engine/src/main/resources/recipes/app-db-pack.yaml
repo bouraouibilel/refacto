@@ -1,0 +1,102 @@
+id: APP-Database-Performance
+name: Pack APP Database Performance
+version: "1.0"
+description: Optimisations et règles de persistance de la roadmap APP
+recipes:
+  - id: APP-DB-001
+    version: "1.0"
+    name: Centraliser les accès DB dans des DAO
+    category: DATABASE
+    severity: HIGH
+    detectorEngine: AST
+    automationLevel: REVIEW_REQUIRED
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [database, dao, architecture]
+    status: APPROVED
+    author: APP Migration
+    rationale: Supprimer les accès EntityManager/JdbcTemplate directs dans les services et batchs.
+
+  - id: APP-DB-002
+    version: "1.0"
+    name: Traitements de masse SQL directs
+    category: DATABASE
+    severity: HIGH
+    detectorEngine: AST
+    automationLevel: REVIEW_REQUIRED
+    dependsOn: [APP-DB-001]
+    validation: [compilation, unit-tests, integration-tests]
+    tags: [database, jpa, batch, sql]
+    status: APPROVED
+    author: APP Migration
+    rationale: Éviter le chargement de milliers d'entités JPA pour une mise à jour uniforme.
+
+  - id: APP-DB-003
+    version: "1.0"
+    name: Analyse SELECT FOR UPDATE et concurrence
+    category: DATABASE
+    severity: HIGH
+    detectorEngine: SQL
+    automationLevel: MANUAL_ONLY
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [database, lock, concurrency]
+    status: APPROVED
+    author: APP Migration
+    rationale: Vérifier ordre de tri déterministe et durée de transaction avant SKIP LOCKED.
+
+  - id: APP-DB-004
+    version: "1.0"
+    name: Appels DB en boucle (N+1 queries)
+    category: DATABASE
+    severity: HIGH
+    detectorEngine: AST
+    automationLevel: REVIEW_REQUIRED
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [database, performance, loop]
+    status: APPROVED
+    author: APP Migration
+    rationale: Remplacer les accès unitaires par des lots (bulk retrieval).
+
+  - id: APP-DB-005
+    version: "1.0"
+    name: Réduction des données inutiles et SELECT *
+    category: DATABASE
+    severity: MEDIUM
+    detectorEngine: SQL
+    automationLevel: REVIEW_REQUIRED
+    dependsOn: [APP-DB-002]
+    validation: [compilation, unit-tests]
+    tags: [database, projection, performance]
+    status: APPROVED
+    author: APP Migration
+    rationale: Exécuter après APP-DB-002 car certaines méthodes DAO peuvent disparaître.
+
+  - id: APP-DB-006
+    version: "1.0"
+    name: Bulk update dans les chunks
+    category: DATABASE
+    severity: MEDIUM
+    detectorEngine: AST
+    automationLevel: MANUAL_ONLY
+    dependsOn: []
+    validation: [compilation, unit-tests, integration-tests]
+    tags: [database, batch, chunk]
+    status: APPROVED
+    author: APP Migration
+    rationale: La suppression des chunks peut provoquer des régressions de reprise sur erreur.
+
+  - id: APP-DB-007
+    version: "1.0"
+    name: Qualité SQL et indexation
+    category: DATABASE
+    severity: MEDIUM
+    detectorEngine: SQL
+    automationLevel: AUTO_WITH_TESTS
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [database, sql, index]
+    status: APPROVED
+    author: APP Migration
+    rationale: Détecter fonctions sur filtres et COUNT(*) inutiles.

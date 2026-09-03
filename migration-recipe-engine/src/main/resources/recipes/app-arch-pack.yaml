@@ -1,0 +1,32 @@
+id: APP-Architecture
+name: Pack Architecture & Découplage APP
+version: "1.0"
+description: Découplage des composants partagés et externalisation vers APP-commons
+recipes:
+  - id: APP-ARCH-001
+    version: "1.0"
+    name: Découplage des composants métier partagés
+    category: ARCHITECTURE
+    severity: HIGH
+    detectorEngine: AST
+    automationLevel: MANUAL_ONLY
+    dependsOn: []
+    validation: [compilation, unit-tests, integration-tests]
+    tags: [architecture, coupling, batch]
+    status: APPROVED
+    author: APP Architecture
+    rationale: Éviter les DAO ou Entités métier partagés par de multiples batchs hétérogènes.
+
+  - id: APP-ARCH-002
+    version: "1.0"
+    name: Externalisation vers APP-commons
+    category: ARCHITECTURE
+    severity: MEDIUM
+    detectorEngine: AST
+    automationLevel: MANUAL_ONLY
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [architecture, commons, packaging]
+    status: APPROVED
+    author: APP Architecture
+    rationale: Externaliser les utilitaires techniques purs et exclure la logique métier.
