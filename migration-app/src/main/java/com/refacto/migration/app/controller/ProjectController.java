@@ -22,11 +22,39 @@ public class ProjectController {
 
     public record CreateProjectRequest(String name, String repositoryPath, String branch) {}
 
+    public record RunAnalysisRequest(
+            String targetJavaVersion,
+            String targetSpringBootVersion,
+            String targetSpringBatchVersion,
+            String id,
+            String name,
+            String description,
+            java.util.Map<String, String> targets
+    ) {
+        public TargetProfile toTargetProfile() {
+            if (targets != null && !targets.isEmpty()) {
+                return new TargetProfile(
+                        id != null ? id : "custom-target",
+                        name != null ? name : "Cible personnalisée",
+                        description != null ? description : "",
+                        targetJavaVersion != null ? targetJavaVersion : targets.getOrDefault("java", "21"),
+                        targetSpringBootVersion != null ? targetSpringBootVersion : targets.getOrDefault("spring-boot", "3.3.4"),
+                        targetSpringBatchVersion != null ? targetSpringBatchVersion : targets.getOrDefault("spring-batch", "5.1.2"),
+                        targets
+                );
+            }
+            return TargetProfile.create(targetJavaVersion, targetSpringBootVersion, targetSpringBatchVersion);
+        }
+    }
+
     @PostMapping("/demo")
-    public ResponseEntity<MigrationOrchestratorService.AnalysisContext> runDemoAnalysis() {
+    public ResponseEntity<MigrationOrchestratorService.AnalysisContext> runDemoAnalysis(
+            @RequestBody(required = false) RunAnalysisRequest request
+    ) {
         Path samplePath = resolveDemoPath();
         Project project = orchestrator.registerProject("Sample Legacy APP", samplePath.toAbsolutePath().toString(), "main");
-        MigrationOrchestratorService.AnalysisContext context = orchestrator.runFullAnalysis(project.id(), TargetProfile.defaultJava17Profile());
+        TargetProfile profile = request != null ? request.toTargetProfile() : TargetProfile.java21Profile();
+        MigrationOrchestratorService.AnalysisContext context = orchestrator.runFullAnalysis(project.id(), profile);
         return ResponseEntity.ok(context);
     }
 
@@ -70,9 +98,10 @@ public class ProjectController {
     @PostMapping("/{id}/analyses")
     public ResponseEntity<MigrationOrchestratorService.AnalysisContext> runAnalysis(
             @PathVariable String id,
-            @RequestBody(required = false) TargetProfile targetProfile
+            @RequestBody(required = false) RunAnalysisRequest request
     ) {
-        MigrationOrchestratorService.AnalysisContext context = orchestrator.runFullAnalysis(id, targetProfile);
+        TargetProfile profile = request != null ? request.toTargetProfile() : TargetProfile.java21Profile();
+        MigrationOrchestratorService.AnalysisContext context = orchestrator.runFullAnalysis(id, profile);
         return ResponseEntity.ok(context);
     }
 }

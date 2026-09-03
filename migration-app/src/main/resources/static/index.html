@@ -45,9 +45,13 @@
                     <span class="text-slate-500">Projet actif :</span>
                     <span id="activeProjectLabel" class="font-semibold text-slate-800">Chargement...</span>
                 </div>
+                <div id="activeTargetBadge" class="hidden md:flex items-center space-x-1.5 text-xs bg-purple-50 text-purple-700 px-2.5 py-1.5 rounded-lg border border-purple-200 font-semibold shadow-2xs">
+                    <i data-lucide="target" class="w-3.5 h-3.5 text-purple-600"></i>
+                    <span id="activeTargetLabel">Cible : Java 21 LTS • Spring Boot 3.3</span>
+                </div>
                 <button onclick="loadDemoApp()" class="inline-flex items-center space-x-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
                     <i data-lucide="play" class="w-4 h-4"></i>
-                    <span>Charger Démo (Legacy App)</span>
+                    <span>Charger Démo</span>
                 </button>
                 <button onclick="openImportModal()" class="inline-flex items-center space-x-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
                     <i data-lucide="folder-plus" class="w-4 h-4"></i>
@@ -390,22 +394,51 @@
 
     <!-- Import Project Modal -->
     <div id="importModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden">
-        <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl border border-slate-200">
-            <h3 class="font-bold text-slate-900 text-lg mb-2">Analyser un Projet Java</h3>
-            <p class="text-xs text-slate-500 mb-4">Saisissez le chemin local du projet multi-modules à analyser.</p>
+        <div class="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-slate-200">
+            <h3 class="font-bold text-slate-900 text-lg mb-1">Analyser & Planifier la Migration</h3>
+            <p class="text-xs text-slate-500 mb-4">Renseignez le chemin du projet et choisissez vos versions cibles de migration.</p>
 
             <div class="space-y-4 text-sm">
                 <div>
-                    <label class="block font-medium text-slate-700 mb-1">Nom du projet</label>
-                    <input type="text" id="importProjectName" value="Sample Legacy APP" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                    <label class="block font-medium text-slate-700 mb-1 text-xs">Nom du projet</label>
+                    <input type="text" id="importProjectName" value="Sample Legacy APP" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div>
-                    <label class="block font-medium text-slate-700 mb-1">Répertoire local du projet</label>
-                    <input type="text" id="importProjectPath" value="d:/work/sample/refacto/sample-legacy-app" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                    <label class="block font-medium text-slate-700 mb-1 text-xs">Répertoire local du projet (ou chemin vers pom.xml)</label>
+                    <input type="text" id="importProjectPath" value="d:/work/sample/refacto/sample-legacy-app" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 font-mono">
                 </div>
                 <div>
-                    <label class="block font-medium text-slate-700 mb-1">Branche source</label>
-                    <input type="text" id="importBranch" value="main" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                    <label class="block font-medium text-slate-700 mb-1 text-xs">Branche source</label>
+                    <input type="text" id="importBranch" value="main" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <!-- Cibles de Migration -->
+                <div class="border-t border-slate-200 pt-3 bg-slate-50/70 p-3 rounded-xl border">
+                    <h4 class="font-bold text-slate-800 text-xs uppercase tracking-wider mb-2.5 flex items-center space-x-1.5">
+                        <i data-lucide="target" class="w-4 h-4 text-blue-600"></i>
+                        <span>Configuration de la Cible de Migration</span>
+                    </h4>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-700 text-xs mb-1">Version Java Cible</label>
+                            <select id="targetJavaVersion" onchange="onTargetSelectionChanged()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 bg-white">
+                                <option value="21" selected>Java 21 LTS (Recommandé)</option>
+                                <option value="17">Java 17 LTS (Transition)</option>
+                                <option value="25">Java 25 LTS (Futur-Proof)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 text-xs mb-1">Framework Spring Cible</label>
+                            <select id="targetSpringBootVersion" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-blue-500 bg-white">
+                                <option value="3.3.4" selected>Spring Boot 3.3 (Spring 6)</option>
+                                <option value="4.0.0-M1">Spring Boot 4.0 (Spring 7)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="targetSummaryHint" class="mt-2.5 text-[11px] text-blue-800 bg-blue-50 p-2 rounded-lg border border-blue-200 flex items-center space-x-2">
+                        <i data-lucide="info" class="w-3.5 h-3.5 text-blue-600 shrink-0"></i>
+                        <span>Bascule automatique : Jakarta EE 10, Spring Batch 5.1, Hibernate 6.5.</span>
+                    </div>
                 </div>
             </div>
 
@@ -477,10 +510,41 @@
                 .replace(/'/g, '&#039;');
         }
 
+        function onTargetSelectionChanged() {
+            const javaVer = document.getElementById('targetJavaVersion').value;
+            const springSelect = document.getElementById('targetSpringBootVersion');
+            const hint = document.getElementById('targetSummaryHint');
+
+            if (javaVer === '25') {
+                springSelect.value = '4.0.0-M1';
+                hint.innerHTML = '<i data-lucide="info" class="w-3.5 h-3.5 text-purple-600 shrink-0"></i><span>Cible Avant-Garde : Spring Boot 4.0, Spring 7, Spring Batch 6, Jakarta EE 11.</span>';
+            } else if (javaVer === '17') {
+                springSelect.value = '3.3.4';
+                hint.innerHTML = '<i data-lucide="info" class="w-3.5 h-3.5 text-blue-600 shrink-0"></i><span>Cible Transition : Spring Boot 3.3, Spring 6.1, Spring Batch 5.1, Jakarta EE 10.</span>';
+            } else {
+                springSelect.value = '3.3.4';
+                hint.innerHTML = '<i data-lucide="info" class="w-3.5 h-3.5 text-blue-600 shrink-0"></i><span>Cible Recommandée : Java 21 LTS (Virtual Threads), Spring Boot 3.3, Batch 5.1, Jakarta EE 10.</span>';
+            }
+            lucide.createIcons();
+        }
+
+        function updateTargetBadge(javaVer, springVer) {
+            const badge = document.getElementById('activeTargetBadge');
+            const label = document.getElementById('activeTargetLabel');
+            if (badge && label) {
+                badge.classList.remove('hidden');
+                label.innerText = `Cible : Java ${javaVer || '21'} LTS • Spring Boot ${springVer ? springVer.split('.')[0] + '.' + springVer.split('.')[1] : '3.3'}`;
+            }
+        }
+
         async function startAnalysis() {
             const name = document.getElementById('importProjectName').value.trim() || "Application Java";
             let path = document.getElementById('importProjectPath').value.trim();
             const branch = document.getElementById('importBranch').value.trim() || 'main';
+
+            const targetJavaVersion = document.getElementById('targetJavaVersion').value;
+            const targetSpringBootVersion = document.getElementById('targetSpringBootVersion').value;
+            const targetSpringBatchVersion = targetJavaVersion === '25' ? '6.0.0-M1' : '5.1.2';
 
             if ((path.startsWith('"') && path.endsWith('"')) || (path.startsWith("'") && path.endsWith("'"))) {
                 path = path.substring(1, path.length - 1).trim();
@@ -493,6 +557,7 @@
 
             closeImportModal();
             document.getElementById('activeProjectLabel').innerText = "Analyse en cours...";
+            updateTargetBadge(targetJavaVersion, targetSpringBootVersion);
 
             try {
                 // 1. Create project
@@ -507,11 +572,15 @@
                 }
                 const project = await projRes.json();
 
-                // 2. Launch analysis
+                // 2. Launch analysis with TargetProfile options
                 const anaRes = await fetch(`/api/projects/${project.id}/analyses`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(null)
+                    body: JSON.stringify({
+                        targetJavaVersion,
+                        targetSpringBootVersion,
+                        targetSpringBatchVersion
+                    })
                 });
                 if (!anaRes.ok) {
                     const err = await anaRes.json().catch(() => ({ message: anaRes.statusText }));
@@ -527,10 +596,15 @@
 
         async function loadDemoApp() {
             document.getElementById('activeProjectLabel').innerText = "Chargement démo en cours...";
+            const targetJavaVersion = document.getElementById('targetJavaVersion') ? document.getElementById('targetJavaVersion').value : '21';
+            const targetSpringBootVersion = document.getElementById('targetSpringBootVersion') ? document.getElementById('targetSpringBootVersion').value : '3.3.4';
+            updateTargetBadge(targetJavaVersion, targetSpringBootVersion);
+
             try {
                 const anaRes = await fetch('/api/projects/demo', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targetJavaVersion, targetSpringBootVersion })
                 });
                 if (!anaRes.ok) {
                     const err = await anaRes.json().catch(() => ({ message: anaRes.statusText }));
@@ -556,6 +630,12 @@
             const javaVer = (data.snapshot && data.snapshot.detectedJavaVersion) ? ` (Java ${data.snapshot.detectedJavaVersion})` : '';
             document.getElementById('activeProjectLabel').innerText = data.project.name + javaVer;
             document.getElementById('findingsCountBadge').innerText = (data.findings || []).length;
+
+            if (data.targetProfile) {
+                const tj = data.targetProfile.targetJavaVersion || (data.targetProfile.targets ? data.targetProfile.targets.java : '21');
+                const ts = data.targetProfile.targetSpringBootVersion || (data.targetProfile.targets ? data.targetProfile.targets['spring-boot'] : '3.3.4');
+                updateTargetBadge(tj, ts);
+            }
 
             const modules = data.modules || [];
             const batches = data.batches || [];
@@ -656,147 +736,291 @@
 
         function renderDependencies(dependencies) {
             const tbody = document.getElementById('dependenciesTableBody');
-            tbody.innerHTML = dependencies.map(d => `
-                <tr class="hover:bg-slate-50">
-                    <td class="px-4 py-3 font-medium text-slate-900">${d.groupId}:${d.artifactId}</td>
-                    <td class="px-4 py-3 text-slate-600"><code>${d.currentVersion}</code></td>
-                    <td class="px-4 py-3 text-blue-600 font-semibold"><code>${d.targetVersion}</code></td>
-                    <td class="px-4 py-3 text-slate-500 text-xs">${d.modules.join(', ')}</td>
-                    <td class="px-4 py-3">
-                        ${d.conflict ? '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-bold">OUI</span>' : '<span class="text-slate-400 text-xs">Non</span>'}
-                    </td>
-                    <td class="px-4 py-3">
-                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold ${d.migrationStatus === 'BREAKING_MIGRATION' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}">
-                            ${d.migrationStatus} (${d.breakingChangeCount} breaking)
-                        </span>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        function renderFindings(findings) {
-            const container = document.getElementById('findingsList');
-            if (!findings || findings.length === 0) {
-                container.innerHTML = '<div class="text-sm text-slate-400">Aucun finding détecté.</div>';
+            if (!dependencies || dependencies.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-400">Aucune dépendance trouvée.</td></tr>';
                 return;
             }
-            container.innerHTML = findings.map(f => {
-                const sevColor = f.severity === 'CRITICAL' ? 'border-l-red-600 text-red-600' :
-                        (f.severity === 'HIGH' ? 'border-l-orange-500 text-orange-600' : 'border-l-amber-500 text-amber-600');
+
+            tbody.innerHTML = dependencies.map(d => {
+                let statusBadge;
+                if (d.migrationStatus === 'BREAKING_MIGRATION') {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center space-x-1 w-max">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-600"></span>
+                        <span>Bascule Majeure (${d.breakingChangeCount} breaking)</span>
+                    </span>`;
+                } else if (d.migrationStatus === 'UPGRADE_REQUIRED') {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200 flex items-center space-x-1 w-max">
+                        <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
+                        <span>Mise à niveau requise</span>
+                    </span>`;
+                } else {
+                    statusBadge = `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center space-x-1 w-max">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                        <span>À jour</span>
+                    </span>`;
+                }
+
+                // Affichage propre sans 'managed'
+                const isManaged = d.currentVersion.includes('BOM') || d.currentVersion === 'managed';
+                const cleanCurrent = isManaged ? (d.currentVersion === 'managed' ? '2.x (géré par BOM)' : d.currentVersion) : d.currentVersion;
 
                 return `
-                <div class="p-4 rounded-xl border border-slate-200 border-l-4 ${sevColor} bg-white shadow-sm space-y-2">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-2">
-                            <span class="font-bold text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-mono">${escapeHtml(f.recipeId)}</span>
-                            <span class="text-xs font-semibold uppercase px-2 py-0.5 rounded ${f.severity === 'HIGH' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}">${escapeHtml(f.severity)}</span>
-                            <span class="text-xs text-slate-500 font-mono">${escapeHtml(f.automationLevel)} &bull; Confiance: ${f.confidence}%</span>
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="px-4 py-3 font-medium text-slate-900 font-mono text-xs">
+                        <div class="font-bold text-slate-800">${escapeHtml(d.groupId)}</div>
+                        <div class="text-blue-600 text-[11px]">${escapeHtml(d.artifactId)}</div>
+                    </td>
+                    <td class="px-4 py-3 text-slate-700 font-mono text-xs">
+                        <span class="px-2 py-0.5 rounded ${isManaged ? 'bg-slate-100 text-slate-700 font-medium' : 'bg-slate-50 text-slate-800'}">
+                            ${escapeHtml(cleanCurrent)}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 font-mono text-xs">
+                        <span class="px-2 py-0.5 rounded bg-blue-50 text-blue-800 font-bold border border-blue-200">
+                            ${escapeHtml(d.targetVersion)}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-slate-500 text-xs">
+                        <div class="max-w-xs truncate" title="${escapeHtml(d.modules.join(', '))}">
+                            ${escapeHtml(d.modules.join(', '))}
                         </div>
-                        <button onclick="askAiAboutFinding('${escapeHtml(f.id)}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 flex items-center space-x-1">
-                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-                            <span>Expliquer avec l'IA</span>
-                        </button>
-                    </div>
-
-                    <div class="font-semibold text-slate-800 text-sm">${escapeHtml(f.description)}</div>
-                    <div class="text-xs text-slate-500 flex items-center space-x-2">
-                        <span>Fichier :</span>
-                        <code class="text-slate-700 bg-slate-100 px-1 py-0.5 rounded">${escapeHtml(f.filePath)}:${f.startLine}</code>
-                        ${f.potentialRoundTrips ? `<span class="text-red-600 font-semibold">&bull; ~${f.potentialRoundTrips} round-trips estimés</span>` : ''}
-                    </div>
-
-                    <div class="p-2.5 bg-slate-50 rounded-lg text-xs border border-slate-200 space-y-1">
-                        <div><strong class="text-slate-700">Raison technique :</strong> ${escapeHtml(f.technicalReason)}</div>
-                        <div><strong class="text-blue-700">Action recommandée :</strong> ${escapeHtml(f.suggestedAction)}</div>
-                    </div>
-
-                    ${f.codeSnippet ? `
-                        <pre class="bg-slate-900 text-slate-100 p-2.5 rounded-lg text-xs overflow-x-auto font-mono">${escapeHtml(f.codeSnippet)}</pre>
-                    ` : ''}
-                </div>
-            `}).join('');
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        ${d.conflict ? '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-bold border border-red-200">OUI</span>' : '<span class="text-slate-400 text-xs">Non</span>'}
+                    </td>
+                    <td class="px-4 py-3">
+                        ${statusBadge}
+                    </td>
+                </tr>
+                `;
+            }).join('');
         }
 
-        async function loadRecipes() {
-            try {
-                const res = await fetch('/api/recipes');
-                const recipes = await res.json();
-                const container = document.getElementById('recipesContainer');
-                container.innerHTML = recipes.map(r => `
-                    <div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-2">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-bold font-mono text-blue-600">${escapeHtml(r.id)}</span>
-                            <span class="text-xs px-2 py-0.5 rounded-full font-semibold ${r.severity === 'CRITICAL' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}">${escapeHtml(r.severity)}</span>
-                        </div>
-                        <h4 class="font-bold text-slate-900 text-sm">${escapeHtml(r.name)}</h4>
-                        <p class="text-xs text-slate-600">${escapeHtml(r.description)}</p>
-                        <div class="text-[11px] text-slate-500 flex items-center space-x-3 pt-1 border-t border-slate-100">
-                            <span>Auto : <strong class="text-slate-700">${escapeHtml(r.automationLevel)}</strong></span>
-                            <span>Confiance : <strong>${r.confidenceScore}%</strong></span>
-                        </div>
-                    </div>
-                `).join('');
+        function parseUnifiedDiffToSideBySide(unifiedDiff) {
+            if (!unifiedDiff) return { leftRows: [], rightRows: [] };
+            const lines = unifiedDiff.split(/\r?\n/);
+            const leftRows = [];
+            const rightRows = [];
 
-                const packsRes = await fetch('/api/recipes/packs');
-                const packs = await packsRes.json();
-                const packsContainer = document.getElementById('packsContainer');
-                packsContainer.innerHTML = packs.map(p => `
-                    <div class="p-4 rounded-xl border border-blue-100 bg-blue-50/50 shadow-sm">
-                        <h4 class="font-bold text-slate-900 text-sm mb-1">${escapeHtml(p.name)}</h4>
-                        <p class="text-xs text-slate-500 mb-3">${escapeHtml(p.description)}</p>
-                        <div class="flex flex-wrap gap-1.5">
-                            ${p.recipeIds.map(rid => `<span class="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-mono text-slate-700 font-semibold">${escapeHtml(rid)}</span>`).join('')}
-                        </div>
-                    </div>
-                `).join('');
-            } catch (ignored) {}
-        }
+            let leftLineNum = 1;
+            let rightLineNum = 1;
 
-        function renderWaves(waves) {
-            const container = document.getElementById('wavesContainer');
-            if (!waves || waves.length === 0) {
-                container.innerHTML = '<div class="text-sm text-slate-400">Aucune vague planifiée.</div>';
-                return;
+            let pendingLeft = [];
+            let pendingRight = [];
+
+            function flushPending() {
+                const maxLen = Math.max(pendingLeft.length, pendingRight.length);
+                for (let i = 0; i < maxLen; i++) {
+                    if (i < pendingLeft.length) {
+                        leftRows.push(pendingLeft[i]);
+                    } else {
+                        leftRows.push({ lineNum: '', content: '', type: 'empty' });
+                    }
+
+                    if (i < pendingRight.length) {
+                        rightRows.push(pendingRight[i]);
+                    } else {
+                        rightRows.push({ lineNum: '', content: '', type: 'empty' });
+                    }
+                }
+                pendingLeft = [];
+                pendingRight = [];
             }
-            container.innerHTML = waves.map(w => `
-                <div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex items-center justify-between">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
-                            ${w.index}
-                        </div>
-                        <div>
-                            <div class="font-bold text-slate-900 text-sm">${escapeHtml(w.description)}</div>
-                            <div class="text-xs text-slate-500">${w.recipeExecutions ? w.recipeExecutions.length : 0} recipes ordonnancées</div>
-                        </div>
-                    </div>
-                    <span class="text-xs px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full font-medium">READY</span>
-                </div>
-            `).join('');
+
+            for (const raw of lines) {
+                if (raw.startsWith('---') || raw.startsWith('+++')) continue;
+
+                if (raw.startsWith('@@')) {
+                    flushPending();
+                    const match = raw.match(/@@\s*-(\d+)(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@/);
+                    if (match) {
+                        leftLineNum = parseInt(match[1], 10);
+                        rightLineNum = parseInt(match[2], 10);
+                    }
+                    leftRows.push({ lineNum: '...', content: raw, type: 'hunk' });
+                    rightRows.push({ lineNum: '...', content: raw, type: 'hunk' });
+                    continue;
+                }
+
+                const marker = raw.charAt(0);
+                const text = raw.substring(1);
+
+                if (marker === ' ') {
+                    flushPending();
+                    leftRows.push({ lineNum: leftLineNum++, content: text, type: 'normal' });
+                    rightRows.push({ lineNum: rightLineNum++, content: text, type: 'normal' });
+                } else if (marker === '-') {
+                    pendingLeft.push({ lineNum: leftLineNum++, content: text, type: 'deleted' });
+                } else if (marker === '+') {
+                    pendingRight.push({ lineNum: rightLineNum++, content: text, type: 'added' });
+                }
+            }
+            flushPending();
+            return { leftRows, rightRows };
+        }
+
+        function setDiffViewMode(index, mode) {
+            const sbsEl = document.getElementById(`diff-sbs-${index}`);
+            const uniEl = document.getElementById(`diff-uni-${index}`);
+            const btnSbs = document.getElementById(`btn-sbs-${index}`);
+            const btnUni = document.getElementById(`btn-uni-${index}`);
+
+            if (mode === 'sbs') {
+                if (sbsEl) sbsEl.classList.remove('hidden');
+                if (uniEl) uniEl.classList.add('hidden');
+                if (btnSbs) {
+                    btnSbs.className = 'px-2.5 py-1 rounded bg-blue-600 text-white font-semibold shadow-xs';
+                }
+                if (btnUni) {
+                    btnUni.className = 'px-2.5 py-1 rounded text-slate-600 hover:text-slate-900 font-medium';
+                }
+            } else {
+                if (sbsEl) sbsEl.classList.add('hidden');
+                if (uniEl) uniEl.classList.remove('hidden');
+                if (btnUni) {
+                    btnUni.className = 'px-2.5 py-1 rounded bg-blue-600 text-white font-semibold shadow-xs';
+                }
+                if (btnSbs) {
+                    btnSbs.className = 'px-2.5 py-1 rounded text-slate-600 hover:text-slate-900 font-medium';
+                }
+            }
+        }
+
+        function renderSideBySideTable(sbs, index) {
+            const leftRows = sbs.leftRows;
+            const rightRows = sbs.rightRows;
+            const max = Math.max(leftRows.length, rightRows.length);
+
+            let rowsHtml = '';
+            for (let i = 0; i < max; i++) {
+                const l = leftRows[i] || { lineNum: '', content: '', type: 'empty' };
+                const r = rightRows[i] || { lineNum: '', content: '', type: 'empty' };
+
+                if (l.type === 'hunk') {
+                    rowsHtml += `
+                    <tr class="bg-blue-50/80 text-blue-800 font-mono text-[11px] border-y border-blue-200 select-none">
+                        <td colspan="4" class="px-3 py-1 font-semibold text-center tracking-wide">${escapeHtml(l.content)}</td>
+                    </tr>
+                    `;
+                    continue;
+                }
+
+                // Left styling (Deletions / Legacy)
+                let lGutterClass = 'bg-slate-100 text-slate-400 border-r border-slate-200';
+                let lContentClass = 'bg-white text-slate-800';
+                if (l.type === 'deleted') {
+                    lGutterClass = 'bg-rose-100 text-rose-700 border-r border-rose-300 font-bold';
+                    lContentClass = 'bg-rose-50/80 text-rose-950 font-medium border-l-2 border-rose-500';
+                } else if (l.type === 'empty') {
+                    lGutterClass = 'bg-slate-50 text-transparent border-r border-slate-200';
+                    lContentClass = 'bg-slate-50/40 select-none';
+                }
+
+                // Right styling (Additions / Modernized)
+                let rGutterClass = 'bg-slate-100 text-slate-400 border-r border-slate-200';
+                let rContentClass = 'bg-white text-slate-800';
+                if (r.type === 'added') {
+                    rGutterClass = 'bg-emerald-100 text-emerald-700 border-r border-emerald-300 font-bold';
+                    rContentClass = 'bg-emerald-50/80 text-emerald-950 font-medium border-l-2 border-emerald-500';
+                } else if (r.type === 'empty') {
+                    rGutterClass = 'bg-slate-50 text-transparent border-r border-slate-200';
+                    rContentClass = 'bg-slate-50/40 select-none';
+                }
+
+                rowsHtml += `
+                <tr class="font-mono text-xs leading-5 border-b border-slate-100 hover:bg-slate-100/40 transition-colors">
+                    <td class="w-12 text-right px-2 py-0.5 select-none ${lGutterClass}">${l.lineNum || ''}</td>
+                    <td class="w-1/2 px-3 py-0.5 whitespace-pre overflow-x-hidden ${lContentClass}">${escapeHtml(l.content)}</td>
+                    <td class="w-12 text-right px-2 py-0.5 select-none ${rGutterClass}">${r.lineNum || ''}</td>
+                    <td class="w-1/2 px-3 py-0.5 whitespace-pre overflow-x-hidden ${rContentClass}">${escapeHtml(r.content)}</td>
+                </tr>
+                `;
+            }
+
+            return `
+            <div class="overflow-x-auto border-t border-slate-200">
+                <table class="w-full border-collapse">
+                    <thead class="bg-slate-100 text-slate-700 text-xs uppercase font-bold tracking-wider select-none border-b border-slate-300">
+                        <tr>
+                            <th colspan="2" class="w-1/2 py-2 px-3 text-left border-r border-slate-300">
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center space-x-1.5">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                                        <span>Code Actuel (Avant)</span>
+                                    </span>
+                                    <span class="text-[10px] text-slate-500 font-normal lowercase bg-white px-2 py-0.5 rounded border border-slate-200">legacy</span>
+                                </div>
+                            </th>
+                            <th colspan="2" class="w-1/2 py-2 px-3 text-left">
+                                <div class="flex items-center justify-between">
+                                    <span class="flex items-center space-x-1.5">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                                        <span>Code Cible Migré (Après)</span>
+                                    </span>
+                                    <span class="text-[10px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">transformé</span>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                    </tbody>
+                </table>
+            </div>
+            `;
         }
 
         function renderDiffs(dryRun) {
             const container = document.getElementById('diffsList');
             if (!dryRun || !dryRun.diffEntries || dryRun.diffEntries.length === 0) {
-                container.innerHTML = '<div class="text-sm text-slate-400">Aucun changement en attente.</div>';
+                container.innerHTML = '<div class="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400 text-sm">Aucun diff de transformation en attente.</div>';
                 return;
             }
 
-            container.innerHTML = dryRun.diffEntries.map(d => `
-                <div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-3">
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <span class="text-xs font-bold text-blue-600 font-mono">${escapeHtml(d.recipeId)}</span>
-                            <h4 class="font-semibold text-slate-900 text-sm">${escapeHtml(d.filePath)}</h4>
+            container.innerHTML = dryRun.diffEntries.map((d, index) => {
+                const sideBySide = parseUnifiedDiffToSideBySide(d.unifiedDiff || '');
+                const sideBySideHtml = renderSideBySideTable(sideBySide, index);
+
+                return `
+                <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">
+                    <div class="px-5 py-3.5 bg-slate-100/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center space-x-2.5">
+                            <span class="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded font-mono">${escapeHtml(d.recipeId)}</span>
+                            <span class="font-bold text-slate-900 text-sm font-mono flex items-center space-x-1.5">
+                                <i data-lucide="file-code" class="w-4 h-4 text-slate-500"></i>
+                                <span>${escapeHtml(d.filePath)}</span>
+                            </span>
                         </div>
                         <div class="flex items-center space-x-2">
-                            <span class="text-xs px-2 py-0.5 rounded font-semibold ${d.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}">${escapeHtml(d.status)}</span>
-                            <button onclick="approveDiff('${escapeHtml(d.id)}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold">Approuver</button>
-                            <button onclick="rejectDiff('${escapeHtml(d.id)}')" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold">Rejeter</button>
+                            <div class="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 text-xs font-medium shadow-2xs">
+                                <button id="btn-sbs-${index}" onclick="setDiffViewMode(${index}, 'sbs')" class="px-2.5 py-1 rounded bg-blue-600 text-white font-semibold shadow-2xs">Côte à Côte (IntelliJ)</button>
+                                <button id="btn-uni-${index}" onclick="setDiffViewMode(${index}, 'uni')" class="px-2.5 py-1 rounded text-slate-600 hover:text-slate-900 font-medium">Unifié (Git Patch)</button>
+                            </div>
+                            <span class="text-xs px-2.5 py-1 rounded font-semibold ${d.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}">${escapeHtml(d.status)}</span>
+                            <button onclick="approveDiff('${escapeHtml(d.id)}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition">Approuver</button>
+                            <button onclick="rejectDiff('${escapeHtml(d.id)}')" class="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-xs transition">Rejeter</button>
                         </div>
                     </div>
-                    <pre class="bg-slate-900 text-slate-100 p-3 rounded-lg text-xs font-mono overflow-x-auto">${escapeHtml(d.unifiedDiff)}</pre>
+
+                    ${d.explanation ? `
+                        <div class="px-5 py-2 bg-blue-50/60 border-b border-blue-100 text-xs text-blue-900 flex items-center space-x-2">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-blue-600 shrink-0"></i>
+                            <span>${escapeHtml(d.explanation)}</span>
+                        </div>
+                    ` : ''}
+
+                    <div id="diff-sbs-${index}" class="block">
+                        ${sideBySideHtml}
+                    </div>
+
+                    <div id="diff-uni-${index}" class="hidden p-4 bg-slate-950">
+                        <pre class="text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">${escapeHtml(d.unifiedDiff)}</pre>
+                    </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
+
+            lucide.createIcons();
         }
 
         function renderArchitecture(couplings) {

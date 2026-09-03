@@ -17,43 +17,79 @@ public class DependencyAnalyzerService {
 
     // Knowledge base of major library migrations
     private static final Map<String, LibraryMigrationSpec> MIGRATION_SPECS = new HashMap<>();
+    private static final Map<String, String> DEFAULT_LEGACY_VERSIONS = new HashMap<>();
 
     static {
+        // Known default legacy versions from Spring Boot 2.x / Java 8-11 BOMs
+        DEFAULT_LEGACY_VERSIONS.put("org.slf4j:slf4j-api", "1.7.36 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("ch.qos.logback:logback-classic", "1.2.12 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("org.slf4j:jcl-over-slf4j", "1.7.36 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("org.springframework.batch:spring-batch-core", "4.3.8 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("org.springframework.boot:spring-boot", "2.7.18 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("org.springframework.boot:spring-boot-starter-batch", "2.7.18 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("org.springframework.boot:spring-boot-starter-web", "2.7.18 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("org.springframework.boot:spring-boot-starter-data-jpa", "2.7.18 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("org.hibernate:hibernate-core", "5.6.15.Final (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("javax.persistence:javax.persistence-api", "2.2 (javax)");
+        DEFAULT_LEGACY_VERSIONS.put("javax.servlet:javax.servlet-api", "4.0.1 (javax)");
+        DEFAULT_LEGACY_VERSIONS.put("junit:junit", "4.13.2 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("org.projectlombok:lombok", "1.18.24 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("org.apache.commons:commons-lang3", "3.12.0 (BOM)");
+        DEFAULT_LEGACY_VERSIONS.put("com.fasterxml.jackson.core:jackson-databind", "2.13.5 (BOM)");
+
         MIGRATION_SPECS.put("org.springframework.batch:spring-batch-core", new LibraryMigrationSpec(
-                "5.1.x",
+                "5.1.2",
                 List.of(
-                        "JobBuilderFactory (supprimé dans v5)",
-                        "StepBuilderFactory (supprimé dans v5)",
-                        "Passage javax.sql.DataSource -> jakarta",
-                        "TransactionManager explicite obligatoire dans step"
+                        "JobBuilderFactory supprimé (utiliser JobBuilder avec JobRepository explicite)",
+                        "StepBuilderFactory supprimé (utiliser StepBuilder avec TransactionManager explicite)",
+                        "Passage javax.sql.DataSource -> jakarta.sql.DataSource",
+                        "Nouveau schéma de métadonnées Spring Batch 5 (colonnes SEQUENCE_NAME, BATCH_STEP_EXECUTION)"
                 ),
                 true
         ));
         MIGRATION_SPECS.put("org.springframework.boot:spring-boot", new LibraryMigrationSpec(
-                "3.3.x",
+                "3.3.4",
                 List.of(
-                        "Baseline Java 17 minimum",
-                        "javax.* -> jakarta.* package transition",
-                        "Spring MVC request mapping / security changes"
+                        "Baseline Java 17 minimum (compatible Java 21 LTS et Java 25)",
+                        "Bascule globale du namespace javax.* vers jakarta.* (Servlets 6, JPA 3.1)",
+                        "Changements de configuration de sécurité SecurityFilterChain",
+                        "Obsolescence des propriétés spring.datasource.* legacy"
                 ),
                 true
         ));
         MIGRATION_SPECS.put("org.hibernate:hibernate-core", new LibraryMigrationSpec(
-                "6.5.x",
+                "6.5.3.Final",
                 List.of(
                         "Jakarta Persistence 3.x namespace",
-                        "Remplacement de org.hibernate.Criteria",
-                        "Nouveau type system et mapping JDBC"
+                        "Remplacement total de org.hibernate.Criteria par JPA Criteria API",
+                        "Évolution du type mapping JDBC et conversion des dates java.time.*"
                 ),
                 true
         ));
+        MIGRATION_SPECS.put("ch.qos.logback:logback-classic", new LibraryMigrationSpec(
+                "1.5.8",
+                List.of(
+                        "Nécessite SLF4J 2.0+ (ServiceLoader provider model)",
+                        "Suppression de l'implémentation statique org.slf4j.impl.StaticLoggerBinder",
+                        "Support des Virtual Threads et Java 21"
+                ),
+                false
+        ));
+        MIGRATION_SPECS.put("org.slf4j:slf4j-api", new LibraryMigrationSpec(
+                "2.0.16",
+                List.of(
+                        "Migration vers l'architecture Fluent Logging API",
+                        "Chargement par java.util.ServiceLoader au lieu de StaticLoggerBinder"
+                ),
+                false
+        ));
         MIGRATION_SPECS.put("junit:junit", new LibraryMigrationSpec(
-                "5.10.x",
+                "5.10.3",
                 List.of(
                         "org.junit.Test -> org.junit.jupiter.api.Test",
                         "@Before/@After -> @BeforeEach/@AfterEach",
                         "@Ignore -> @Disabled",
-                        "Remplacement de @Rule / ExpectedException par assertThrows"
+                        "Remplacement de @Rule / ExpectedException par Assertions.assertThrows"
                 ),
                 false
         ));
@@ -90,15 +126,25 @@ public class DependencyAnalyzerService {
 
             Set<String> distinctVersions = new HashSet<>();
             for (ModuleDepOccurrence occ : occList) {
-                if (!"managed".equalsIgnoreCase(occ.version())) {
+                if (!"managed".equalsIgnoreCase(occ.version()) && !occ.version().isBlank()) {
                     distinctVersions.add(occ.version());
                 }
             }
 
             boolean conflict = distinctVersions.size() > 1;
-            String currentVersion = distinctVersions.isEmpty() ? "managed" : String.join(" / ", distinctVersions);
+            String currentVersion;
+            if (!distinctVersions.isEmpty()) {
+                currentVersion = String.join(" / ", distinctVersions);
+            } else {
+                // Résolution fine de la version gérée via catalogue BOM
+                currentVersion = DEFAULT_LEGACY_VERSIONS.getOrDefault(coord, "2.x (géré par BOM)");
+            }
 
             String targetVersion = resolveTargetVersion(groupId, artifactId, targetProfile);
+            if (targetVersion == null) {
+                targetVersion = inferTargetVersion(groupId, artifactId, currentVersion, targetProfile);
+            }
+
             LibraryMigrationSpec spec = MIGRATION_SPECS.get(coord);
 
             int breakingChangeCount = 0;
@@ -111,6 +157,10 @@ public class DependencyAnalyzerService {
                     if (spec.highRisk()) {
                         migrationStatus = "BREAKING_MIGRATION";
                     }
+                } else if (currentVersion.contains("javax") || groupId.contains("javax") ||
+                           groupId.contains("springframework") || groupId.contains("hibernate")) {
+                    breakingChangeCount = 2;
+                    migrationStatus = "BREAKING_MIGRATION";
                 }
             }
 
@@ -150,20 +200,71 @@ public class DependencyAnalyzerService {
 
         Map<String, String> targets = targetProfile.targets();
 
-        if (groupId.contains("springframework.boot")) {
-            return targets.getOrDefault("spring-boot", "3.3.x");
-        }
         if (groupId.contains("springframework.batch")) {
-            return targets.getOrDefault("spring-batch", "5.1.x");
+            return targets.getOrDefault("spring-batch", "5.1.2");
+        }
+        if (groupId.contains("springframework.boot")) {
+            return targets.getOrDefault("spring-boot", "3.3.4");
+        }
+        if (groupId.contains("springframework")) {
+            return targets.getOrDefault("spring-framework", "6.1.13");
         }
         if (groupId.contains("hibernate")) {
-            return targets.getOrDefault("hibernate", "6.5.x");
+            return targets.getOrDefault("hibernate", "6.5.3.Final");
+        }
+        if (groupId.equals("org.slf4j")) {
+            return targets.getOrDefault("slf4j", "2.0.16");
+        }
+        if (groupId.equals("ch.qos.logback")) {
+            return targets.getOrDefault("logback", "1.5.8");
         }
         if (groupId.equals("junit") && artifactId.equals("junit")) {
-            return targets.getOrDefault("junit", "5.10.x");
+            return targets.getOrDefault("junit", "5.10.3");
         }
 
         return null;
+    }
+
+    private String inferTargetVersion(String groupId, String artifactId, String currentVersion, TargetProfile targetProfile) {
+        boolean isJava25 = targetProfile != null && "25".equals(targetProfile.targetJavaVersion());
+
+        if (groupId.startsWith("javax.persistence") || artifactId.contains("persistence-api")) {
+            return isJava25 ? "3.2.0 (jakarta)" : "3.1.0 (jakarta)";
+        }
+        if (groupId.startsWith("javax.servlet") || artifactId.contains("servlet-api")) {
+            return isJava25 ? "6.1.0 (jakarta)" : "6.0.0 (jakarta)";
+        }
+        if (groupId.startsWith("javax.transaction") || artifactId.contains("transaction-api")) {
+            return "2.0.1 (jakarta)";
+        }
+        if (groupId.startsWith("javax.annotation") || artifactId.contains("annotation-api")) {
+            return "2.1.1 (jakarta)";
+        }
+        if (groupId.contains("jackson")) {
+            return isJava25 ? "2.18.0" : "2.17.2";
+        }
+        if (groupId.contains("lombok")) {
+            return "1.18.34";
+        }
+        if (groupId.contains("commons-lang")) {
+            return "3.17.0";
+        }
+        if (groupId.contains("oracle") || artifactId.contains("ojdbc")) {
+            return "23.4.0.24.05";
+        }
+        if (groupId.contains("postgresql")) {
+            return "42.7.4";
+        }
+        if (groupId.contains("mockito")) {
+            return "5.11.0";
+        }
+
+        // Si aucune règle spécifique mais version ancienne détectée
+        if (currentVersion.contains("BOM") || currentVersion.startsWith("1.") || currentVersion.startsWith("2.")) {
+            return "Alignee sur cible";
+        }
+
+        return currentVersion;
     }
 
     private record ModuleDepOccurrence(String moduleName, String version, String scope, boolean direct) {}
