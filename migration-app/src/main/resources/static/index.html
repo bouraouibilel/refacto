@@ -320,20 +320,53 @@
 
         <!-- 7. DRY RUN & DIFFS VIEW -->
         <section id="view-diffs" class="space-y-6 hidden">
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
                     <div>
-                        <h3 class="font-bold text-slate-900 text-lg">Dry Run & Revue Humaine des Diffs</h3>
-                        <p class="text-xs text-slate-500">Visualisez les propositions de transformations sans altérer le code d'origine (Sections 39 & 40).</p>
+                        <div class="flex items-center space-x-2">
+                            <h3 class="font-bold text-slate-900 text-lg">Dry Run & Revue Humaine des Diffs</h3>
+                            <span id="diffTotalBadge" class="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded-full font-mono">0 fichiers</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5">Visualisez les propositions de transformations sans altérer le code d'origine (Sections 39 & 40).</p>
                     </div>
-                    <button onclick="applyAllApproved()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition flex items-center space-x-2">
-                        <i data-lucide="check-check" class="w-4 h-4"></i>
-                        <span>Appliquer les transformations sûres & approuvées</span>
-                    </button>
+                    <div class="flex items-center space-x-3">
+                        <button onclick="applyAllApproved()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition flex items-center space-x-2">
+                            <i data-lucide="check-check" class="w-4 h-4"></i>
+                            <span>Appliquer les transformations sûres & approuvées</span>
+                        </button>
+                    </div>
                 </div>
 
-                <div id="diffsList" class="space-y-6">
+                <!-- Diff Filter & Pagination Toolbar -->
+                <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                    <div class="flex items-center space-x-3 flex-1 min-w-[240px]">
+                        <div class="relative flex-1 max-w-sm">
+                            <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+                            <input type="text" id="diffSearchInput" oninput="onDiffSearch(this.value)" placeholder="Filtrer par fichier, classe ou recipe..." class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div class="flex items-center space-x-1.5 text-slate-600">
+                            <span>Afficher :</span>
+                            <select id="diffPageSizeSelect" onchange="onDiffPageSizeChange(this.value)" class="bg-white border border-slate-300 rounded px-2 py-1 text-xs font-semibold">
+                                <option value="3">3 / page</option>
+                                <option value="5" selected>5 / page</option>
+                                <option value="10">10 / page</option>
+                                <option value="25">25 / page</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="diffPaginationTop" class="flex items-center space-x-2">
+                        <!-- Controls rendered by JS -->
+                    </div>
+                </div>
+
+                <div id="diffsList" class="space-y-6 pt-2">
                     <div class="text-sm text-slate-400">Aucun diff généré.</div>
+                </div>
+
+                <!-- Bottom Pagination -->
+                <div id="diffPaginationBottom" class="flex items-center justify-between pt-4 border-t border-slate-100 text-xs text-slate-600">
+                    <!-- Controls rendered by JS -->
                 </div>
             </div>
         </section>
@@ -1074,16 +1107,110 @@
             `;
         }
 
+        let currentDryRun = null;
+        let diffCurrentPage = 1;
+        let diffPageSize = 5;
+        let diffSearchQuery = '';
+
+        function onDiffSearch(query) {
+            diffSearchQuery = (query || '').toLowerCase().trim();
+            diffCurrentPage = 1;
+            renderDiffsList();
+        }
+
+        function onDiffPageSizeChange(size) {
+            diffPageSize = parseInt(size, 10) || 5;
+            diffCurrentPage = 1;
+            renderDiffsList();
+        }
+
+        function changeDiffPage(newPage) {
+            diffCurrentPage = newPage;
+            renderDiffsList();
+            const el = document.getElementById('view-diffs');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
         function renderDiffs(dryRun) {
+            currentDryRun = dryRun;
+            diffCurrentPage = 1;
+            renderDiffsList();
+        }
+
+        function renderDiffsList() {
             const container = document.getElementById('diffsList');
-            if (!dryRun || !dryRun.diffEntries || dryRun.diffEntries.length === 0) {
+            const totalBadge = document.getElementById('diffTotalBadge');
+            const paginationTop = document.getElementById('diffPaginationTop');
+            const paginationBottom = document.getElementById('diffPaginationBottom');
+
+            if (!currentDryRun || !currentDryRun.diffEntries || currentDryRun.diffEntries.length === 0) {
+                if (totalBadge) totalBadge.innerText = '0 fichier';
+                if (paginationTop) paginationTop.innerHTML = '';
+                if (paginationBottom) paginationBottom.innerHTML = '';
                 container.innerHTML = '<div class="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400 text-sm">Aucun diff de transformation en attente.</div>';
                 return;
             }
 
-            container.innerHTML = dryRun.diffEntries.map((d, index) => {
+            const allEntries = currentDryRun.diffEntries;
+            const filtered = allEntries.filter(d => {
+                if (!diffSearchQuery) return true;
+                return (d.filePath && d.filePath.toLowerCase().includes(diffSearchQuery)) ||
+                       (d.recipeId && d.recipeId.toLowerCase().includes(diffSearchQuery)) ||
+                       (d.recipeName && d.recipeName.toLowerCase().includes(diffSearchQuery)) ||
+                       (d.explanation && d.explanation.toLowerCase().includes(diffSearchQuery));
+            });
+
+            if (totalBadge) {
+                totalBadge.innerText = `${filtered.length} fichier${filtered.length > 1 ? 's' : ''}${filtered.length !== allEntries.length ? ' (filtrés)' : ''}`;
+            }
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="p-8 text-center bg-slate-50 rounded-xl border border-slate-200 text-slate-500 text-sm">
+                    Aucun fichier ne correspond à votre recherche "<strong>${escapeHtml(diffSearchQuery)}</strong>".
+                </div>`;
+                if (paginationTop) paginationTop.innerHTML = '';
+                if (paginationBottom) paginationBottom.innerHTML = '';
+                return;
+            }
+
+            const totalPages = Math.ceil(filtered.length / diffPageSize) || 1;
+            if (diffCurrentPage > totalPages) diffCurrentPage = totalPages;
+            if (diffCurrentPage < 1) diffCurrentPage = 1;
+
+            const startIndex = (diffCurrentPage - 1) * diffPageSize;
+            const endIndex = Math.min(startIndex + diffPageSize, filtered.length);
+            const pageEntries = filtered.slice(startIndex, endIndex);
+
+            function buildPaginationHtml() {
+                return `
+                <div class="flex items-center space-x-1.5 font-medium">
+                    <button onclick="changeDiffPage(${diffCurrentPage - 1})" ${diffCurrentPage <= 1 ? 'disabled class="px-2.5 py-1 rounded bg-slate-200 text-slate-400 cursor-not-allowed"' : 'class="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 shadow-2xs"'}>
+                        &larr; Précédent
+                    </button>
+                    <span class="px-2 py-1 text-slate-700 font-semibold font-mono">
+                        Page ${diffCurrentPage} / ${totalPages}
+                    </span>
+                    <button onclick="changeDiffPage(${diffCurrentPage + 1})" ${diffCurrentPage >= totalPages ? 'disabled class="px-2.5 py-1 rounded bg-slate-200 text-slate-400 cursor-not-allowed"' : 'class="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 shadow-2xs"'}>
+                        Suivant &rarr;
+                    </button>
+                </div>
+                `;
+            }
+
+            if (paginationTop) {
+                paginationTop.innerHTML = buildPaginationHtml();
+            }
+            if (paginationBottom) {
+                paginationBottom.innerHTML = `
+                    <span>Affichage des diffs <strong>${startIndex + 1}</strong> à <strong>${endIndex}</strong> sur un total de <strong>${filtered.length}</strong></span>
+                    ${buildPaginationHtml()}
+                `;
+            }
+
+            container.innerHTML = pageEntries.map((d, i) => {
+                const globalIndex = startIndex + i;
                 const sideBySide = parseUnifiedDiffToSideBySide(d.unifiedDiff || '');
-                const sideBySideHtml = renderSideBySideTable(sideBySide, index);
+                const sideBySideHtml = renderSideBySideTable(sideBySide, globalIndex);
 
                 return `
                 <div class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden mb-6">
@@ -1094,11 +1221,12 @@
                                 <i data-lucide="file-code" class="w-4 h-4 text-slate-500"></i>
                                 <span>${escapeHtml(d.filePath)}</span>
                             </span>
+                            <span class="text-[11px] text-slate-400 font-mono">#${globalIndex + 1}</span>
                         </div>
                         <div class="flex items-center space-x-2">
                             <div class="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 text-xs font-medium shadow-2xs">
-                                <button id="btn-sbs-${index}" onclick="setDiffViewMode(${index}, 'sbs')" class="px-2.5 py-1 rounded bg-blue-600 text-white font-semibold shadow-2xs">Côte à Côte (IntelliJ)</button>
-                                <button id="btn-uni-${index}" onclick="setDiffViewMode(${index}, 'uni')" class="px-2.5 py-1 rounded text-slate-600 hover:text-slate-900 font-medium">Unifié (Git Patch)</button>
+                                <button id="btn-sbs-${globalIndex}" onclick="setDiffViewMode(${globalIndex}, 'sbs')" class="px-2.5 py-1 rounded bg-blue-600 text-white font-semibold shadow-2xs">Côte à Côte (IntelliJ)</button>
+                                <button id="btn-uni-${globalIndex}" onclick="setDiffViewMode(${globalIndex}, 'uni')" class="px-2.5 py-1 rounded text-slate-600 hover:text-slate-900 font-medium">Unifié (Git Patch)</button>
                             </div>
                             <span class="text-xs px-2.5 py-1 rounded font-semibold ${d.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}">${escapeHtml(d.status)}</span>
                             <button onclick="approveDiff('${escapeHtml(d.id)}')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs transition">Approuver</button>
@@ -1108,16 +1236,16 @@
 
                     ${d.explanation ? `
                         <div class="px-5 py-2 bg-blue-50/60 border-b border-blue-100 text-xs text-blue-900 flex items-center space-x-2">
-                            <i data-lucide="sparkles" class="w-4 h-4 text-blue-600 shrink-0"></i>
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-blue-600 shrink-0"></i>
                             <span>${escapeHtml(d.explanation)}</span>
                         </div>
                     ` : ''}
 
-                    <div id="diff-sbs-${index}" class="block">
+                    <div id="diff-sbs-${globalIndex}" class="block">
                         ${sideBySideHtml}
                     </div>
 
-                    <div id="diff-uni-${index}" class="hidden p-4 bg-slate-950">
+                    <div id="diff-uni-${globalIndex}" class="hidden p-4 bg-slate-950">
                         <pre class="text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">${escapeHtml(d.unifiedDiff)}</pre>
                     </div>
                 </div>
