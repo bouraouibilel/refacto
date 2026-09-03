@@ -167,6 +167,10 @@ public class MigrationOrchestratorService {
         return Optional.ofNullable(analyses.get(analysisId));
     }
 
+    public Optional<AnalysisContext> getLatestAnalysis() {
+        return analyses.values().stream().reduce((first, second) -> second);
+    }
+
     public void addPerformanceComparison(String analysisId, PerformanceComparison comparison) {
         AnalysisContext ctx = analyses.get(analysisId);
         if (ctx != null) {

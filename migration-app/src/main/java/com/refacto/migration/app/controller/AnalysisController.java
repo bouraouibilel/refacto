@@ -20,6 +20,13 @@ public class AnalysisController {
         this.orchestrator = orchestrator;
     }
 
+    @GetMapping("/latest")
+    public ResponseEntity<MigrationOrchestratorService.AnalysisContext> getLatestAnalysis() {
+        return orchestrator.getLatestAnalysis()
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.noContent().build());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<MigrationOrchestratorService.AnalysisContext> getAnalysis(@PathVariable String id) {
         return orchestrator.getAnalysis(id)

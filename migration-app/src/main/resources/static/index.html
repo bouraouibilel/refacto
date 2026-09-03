@@ -40,14 +40,18 @@
                 </div>
             </div>
 
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-3">
                 <div class="flex items-center space-x-2 text-sm bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
                     <span class="text-slate-500">Projet actif :</span>
-                    <span id="activeProjectLabel" class="font-semibold text-slate-800">Aucun projet sélectionné</span>
+                    <span id="activeProjectLabel" class="font-semibold text-slate-800">Chargement...</span>
                 </div>
-                <button onclick="openImportModal()" class="inline-flex items-center space-x-2 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
+                <button onclick="loadDemoApp()" class="inline-flex items-center space-x-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
+                    <i data-lucide="play" class="w-4 h-4"></i>
+                    <span>Charger Démo (Legacy App)</span>
+                </button>
+                <button onclick="openImportModal()" class="inline-flex items-center space-x-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
                     <i data-lucide="folder-plus" class="w-4 h-4"></i>
-                    <span>Importer / Analyser</span>
+                    <span>Importer un Projet</span>
                 </button>
             </div>
         </div>
@@ -492,6 +496,31 @@
             }
         }
 
+        async function loadDemoApp() {
+            document.getElementById('activeProjectLabel').innerText = "Analyse en cours...";
+            try {
+                const projRes = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: "Sample Legacy APP",
+                        repositoryPath: "sample-legacy-app",
+                        branch: "main"
+                    })
+                });
+                const project = await projRes.json();
+                const anaRes = await fetch(`/api/projects/${project.id}/analyses`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(null)
+                });
+                const analysis = await anaRes.json();
+                loadAnalysis(analysis);
+            } catch (err) {
+                alert("Erreur lors du chargement de la démo : " + err.message);
+            }
+        }
+
         function loadAnalysis(data) {
             currentAnalysis = data;
             document.getElementById('activeProjectLabel').innerText = data.project.name + ' (' + data.snapshot.detectedJavaVersion + ')';
@@ -807,9 +836,26 @@
             window.open(`/api/analyses/${currentAnalysis.analysisId}/report/${format}`, '_blank');
         }
 
-        // Initialize icons on load
-        document.addEventListener('DOMContentLoaded', () => {
+        async function checkAndLoadLatestAnalysis() {
+            try {
+                const res = await fetch('/api/analyses/latest');
+                if (res.ok && res.status === 200) {
+                    const data = await res.json();
+                    if (data && data.analysisId) {
+                        loadAnalysis(data);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn("Pas d'analyse préchargée :", e);
+            }
+            document.getElementById('activeProjectLabel').innerText = "Aucun projet sélectionné";
+        }
+
+        // Initialize icons and load active analysis on load
+        document.addEventListener('DOMContentLoaded', async () => {
             lucide.createIcons();
+            await checkAndLoadLatestAnalysis();
         });
     </script>
 </body>
