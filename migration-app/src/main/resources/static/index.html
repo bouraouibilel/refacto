@@ -796,6 +796,110 @@
             }).join('');
         }
 
+        function renderFindings(findings) {
+            const container = document.getElementById('findingsList');
+            if (!findings || findings.length === 0) {
+                container.innerHTML = '<div class="text-sm text-slate-400">Aucun finding détecté.</div>';
+                return;
+            }
+            container.innerHTML = findings.map(f => {
+                const sevColor = f.severity === 'CRITICAL' ? 'border-l-red-600 text-red-600' :
+                        (f.severity === 'HIGH' ? 'border-l-orange-500 text-orange-600' : 'border-l-amber-500 text-amber-600');
+
+                return `
+                <div class="p-4 rounded-xl border border-slate-200 border-l-4 ${sevColor} bg-white shadow-sm space-y-2">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-mono">${escapeHtml(f.recipeId)}</span>
+                            <span class="text-xs font-semibold uppercase px-2 py-0.5 rounded ${f.severity === 'HIGH' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}">${escapeHtml(f.severity)}</span>
+                            <span class="text-xs text-slate-500 font-mono">${escapeHtml(f.automationLevel)} &bull; Confiance: ${f.confidence}%</span>
+                        </div>
+                        <button onclick="askAiAboutFinding('${escapeHtml(f.id)}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 flex items-center space-x-1">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                            <span>Expliquer avec l'IA</span>
+                        </button>
+                    </div>
+
+                    <div class="font-semibold text-slate-800 text-sm">${escapeHtml(f.description)}</div>
+                    <div class="text-xs text-slate-500 flex items-center space-x-2">
+                        <span>Fichier :</span>
+                        <code class="text-slate-700 bg-slate-100 px-1 py-0.5 rounded">${escapeHtml(f.filePath)}:${f.startLine}</code>
+                        ${f.potentialRoundTrips ? `<span class="text-red-600 font-semibold">&bull; ~${f.potentialRoundTrips} round-trips estimés</span>` : ''}
+                    </div>
+
+                    <div class="p-2.5 bg-slate-50 rounded-lg text-xs border border-slate-200 space-y-1">
+                        <div><strong class="text-slate-700">Raison technique :</strong> ${escapeHtml(f.technicalReason)}</div>
+                        <div><strong class="text-blue-700">Action recommandée :</strong> ${escapeHtml(f.suggestedAction)}</div>
+                    </div>
+
+                    ${f.codeSnippet ? `
+                        <pre class="bg-slate-900 text-slate-100 p-2.5 rounded-lg text-xs overflow-x-auto font-mono">${escapeHtml(f.codeSnippet)}</pre>
+                    ` : ''}
+                </div>
+            `}).join('');
+        }
+
+        async function loadRecipes() {
+            try {
+                const res = await fetch('/api/recipes');
+                const recipes = await res.json();
+                const container = document.getElementById('recipesContainer');
+                if (container) {
+                    container.innerHTML = recipes.map(r => `
+                        <div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold font-mono text-blue-600">${escapeHtml(r.id)}</span>
+                                <span class="text-xs px-2 py-0.5 rounded-full font-semibold ${r.severity === 'CRITICAL' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}">${escapeHtml(r.severity)}</span>
+                            </div>
+                            <h4 class="font-bold text-slate-900 text-sm">${escapeHtml(r.name)}</h4>
+                            <p class="text-xs text-slate-600">${escapeHtml(r.description)}</p>
+                            <div class="text-[11px] text-slate-500 flex items-center space-x-3 pt-1 border-t border-slate-100">
+                                <span>Auto : <strong class="text-slate-700">${escapeHtml(r.automationLevel)}</strong></span>
+                                <span>Confiance : <strong>${r.confidenceScore}%</strong></span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                const packsRes = await fetch('/api/recipes/packs');
+                const packs = await packsRes.json();
+                const packsContainer = document.getElementById('packsContainer');
+                if (packsContainer) {
+                    packsContainer.innerHTML = packs.map(p => `
+                        <div class="p-4 rounded-xl border border-blue-100 bg-blue-50/50 shadow-sm">
+                            <h4 class="font-bold text-slate-900 text-sm mb-1">${escapeHtml(p.name)}</h4>
+                            <p class="text-xs text-slate-500 mb-3">${escapeHtml(p.description)}</p>
+                            <div class="flex flex-wrap gap-1.5">
+                                ${p.recipeIds.map(rid => `<span class="px-2 py-0.5 bg-white border border-slate-200 rounded text-xs font-mono text-slate-700 font-semibold">${escapeHtml(rid)}</span>`).join('')}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (ignored) {}
+        }
+
+        function renderWaves(waves) {
+            const container = document.getElementById('wavesContainer');
+            if (!waves || waves.length === 0) {
+                container.innerHTML = '<div class="text-sm text-slate-400">Aucune vague planifiée.</div>';
+                return;
+            }
+            container.innerHTML = waves.map(w => `
+                <div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+                            ${w.index}
+                        </div>
+                        <div>
+                            <div class="font-bold text-slate-900 text-sm">${escapeHtml(w.description)}</div>
+                            <div class="text-xs text-slate-500">${w.recipeExecutions ? w.recipeExecutions.length : 0} recipes ordonnancées</div>
+                        </div>
+                    </div>
+                    <span class="text-xs px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full font-medium">READY</span>
+                </div>
+            `).join('');
+        }
+
         function parseUnifiedDiffToSideBySide(unifiedDiff) {
             if (!unifiedDiff) return { leftRows: [], rightRows: [] };
             const lines = unifiedDiff.split(/\r?\n/);
