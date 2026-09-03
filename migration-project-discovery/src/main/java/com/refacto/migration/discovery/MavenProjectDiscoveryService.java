@@ -15,9 +15,10 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Stream;
@@ -57,50 +58,69 @@ public class MavenProjectDiscoveryService {
         return BuildSystem.UNKNOWN;
     }
 
+    public record DeclaredModule(String modulePath, String profileId) {}
+
     public List<ModuleDescriptor> discoverModules(Path projectRoot) {
         List<ModuleDescriptor> modules = new ArrayList<>();
-        Path rootPom = projectRoot.resolve("pom.xml");
+        final Path absProjectRoot = projectRoot.toAbsolutePath().normalize();
+        Path rootPom = absProjectRoot.resolve("pom.xml");
 
         Map<String, String> globalProperties = new HashMap<>();
         Map<String, String> managedVersions = new HashMap<>();
 
         if (Files.exists(rootPom)) {
-            discoverModuleRecursive(projectRoot, rootPom, projectRoot, globalProperties, managedVersions, modules);
+            discoverModuleRecursive(absProjectRoot, rootPom, absProjectRoot, globalProperties, managedVersions, modules);
         } else {
-            log.info("Aucun pom.xml direct à la racine : {}. Découverte par scan des sous-répertoires.", projectRoot);
+            log.info("Aucun pom.xml direct à la racine : {}. Découverte par scan des sous-répertoires.", absProjectRoot);
         }
 
         // Fallback & complément : scanner le système de fichiers pour détecter tous les sous-modules Maven
-        // (gestion des modules déclarés dans des profils Maven ou arborescences non standards)
-        scanFilesystemForMissingModules(projectRoot, globalProperties, managedVersions, modules);
+        // (gestion des modules déclarés dans des profils Maven ou arborescences multi-niveaux)
+        scanFilesystemForMissingModules(absProjectRoot, globalProperties, managedVersions, modules);
 
         // Resolve inter-module dependencies
         resolveDependentModules(modules);
         return modules;
     }
 
-    private void scanFilesystemForMissingModules(Path projectRoot, Map<String, String> globalProps,
+    private void scanFilesystemForMissingModules(Path absProjectRoot, Map<String, String> globalProps,
                                                 Map<String, String> managedVersions, List<ModuleDescriptor> result) {
-        try (Stream<Path> stream = Files.walk(projectRoot, 5)) {
-            List<Path> poms = stream
-                    .filter(p -> Files.isRegularFile(p) && p.getFileName().toString().equals("pom.xml"))
-                    .filter(p -> !p.equals(projectRoot.resolve("pom.xml")))
-                    .filter(p -> {
-                        String s = p.toString().replace('\\', '/');
-                        return !s.contains("/target/") && !s.contains("/.git/") &&
-                               !s.contains("/.idea/") && !s.contains("/.vscode/") &&
-                               !s.contains("/node_modules/") && !s.contains("/.m2/");
-                    })
-                    .sorted()
-                    .toList();
+        List<Path> poms = new ArrayList<>();
+        try {
+            Files.walkFileTree(absProjectRoot, EnumSet.noneOf(FileVisitOption.class), 8, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    String name = dir.getFileName() != null ? dir.getFileName().toString() : "";
+                    if (name.equals("target") || name.equals(".git") || name.equals(".idea") ||
+                            name.equals(".vscode") || name.equals("node_modules") || name.equals(".m2")) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    if (file.getFileName() != null && file.getFileName().toString().equalsIgnoreCase("pom.xml")) {
+                        if (!file.equals(absProjectRoot.resolve("pom.xml"))) {
+                            poms.add(file);
+                        }
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
 
             for (Path pom : poms) {
-                Path modDir = pom.getParent();
-                String rel = projectRoot.relativize(modDir).toString().replace('\\', '/');
+                Path modDir = pom.getParent().toAbsolutePath().normalize();
+                String rel = absProjectRoot.relativize(modDir).toString().replace('\\', '/');
                 boolean alreadyPresent = result.stream().anyMatch(m -> m.relativePath().equals(rel));
                 if (!alreadyPresent) {
                     log.info("Module Maven découvert par scan automatique : {} ({})", modDir.getFileName(), rel);
-                    discoverModuleRecursive(projectRoot, pom, modDir, globalProps, managedVersions, result);
+                    discoverModuleRecursive(absProjectRoot, pom, modDir, globalProps, managedVersions, result);
                 }
             }
         } catch (Exception e) {
@@ -152,7 +172,9 @@ public class MavenProjectDiscoveryService {
             boolean hasSpringBatch = frameworks.contains("Spring Batch");
             boolean hasJpa = frameworks.contains("JPA") || frameworks.contains("Hibernate");
 
-            String relativePath = projectRoot.relativize(moduleDir).toString().replace('\\', '/');
+            final Path absProjectRoot = projectRoot.toAbsolutePath().normalize();
+            final Path absModuleDir = moduleDir.toAbsolutePath().normalize();
+            String relativePath = absProjectRoot.relativize(absModuleDir).toString().replace('\\', '/');
             if (relativePath.isEmpty()) {
                 relativePath = ".";
             }
@@ -181,24 +203,15 @@ public class MavenProjectDiscoveryService {
             }
 
             // Découverte récursive de tous les sous-modules déclarés (directs + profils)
-            List<String> declaredModules = extractAllDeclaredModules(root, properties);
-            for (String subModuleName : declaredModules) {
-                String cleanSub = subModuleName.replace('\\', '/').trim();
-                Path subModuleDir;
-                Path subModulePom;
-                if (cleanSub.endsWith(".xml")) {
-                    subModulePom = moduleDir.resolve(cleanSub).normalize();
-                    subModuleDir = subModulePom.getParent();
-                } else {
-                    subModuleDir = moduleDir.resolve(cleanSub).normalize();
-                    subModulePom = subModuleDir.resolve("pom.xml");
-                }
-
-                if (Files.exists(subModulePom)) {
-                    String subRel = projectRoot.relativize(subModuleDir).toString().replace('\\', '/');
+            List<DeclaredModule> declaredModules = extractAllDeclaredModulesWithProfiles(root, properties);
+            for (DeclaredModule decl : declaredModules) {
+                Path subModulePom = resolveSubmodulePom(absProjectRoot, absModuleDir, decl.modulePath(), decl.profileId());
+                if (subModulePom != null && Files.exists(subModulePom)) {
+                    Path subModuleDir = subModulePom.getParent().toAbsolutePath().normalize();
+                    String subRel = absProjectRoot.relativize(subModuleDir).toString().replace('\\', '/');
                     boolean alreadyAdded = result.stream().anyMatch(m -> m.relativePath().equals(subRel));
                     if (!alreadyAdded) {
-                        discoverModuleRecursive(projectRoot, subModulePom, subModuleDir, properties, managedVersions, result);
+                        discoverModuleRecursive(absProjectRoot, subModulePom, subModuleDir, properties, managedVersions, result);
                     }
                 }
             }
@@ -207,18 +220,75 @@ public class MavenProjectDiscoveryService {
         }
     }
 
-    private List<String> extractAllDeclaredModules(Element root, Map<String, String> properties) {
-        List<String> modules = new ArrayList<>();
-        NodeList moduleNodes = root.getElementsByTagName("module");
-        for (int i = 0; i < moduleNodes.getLength(); i++) {
-            String text = moduleNodes.item(i).getTextContent();
-            if (text != null && !text.isBlank()) {
-                String resolved = resolveProperty(text.trim(), properties);
-                if (resolved != null && !resolved.isBlank()) {
-                    modules.add(resolved.trim());
+    private Path resolveSubmodulePom(Path projectRoot, Path moduleDir, String subModuleName, String profileId) {
+        String cleanSub = subModuleName.replace('\\', '/').trim();
+        if (cleanSub.endsWith(".xml")) {
+            Path directPom = moduleDir.resolve(cleanSub).normalize();
+            if (Files.exists(directPom)) return directPom;
+        }
+
+        // 1. Module dans le sous-dossier direct : moduleDir/cleanSub/pom.xml
+        Path directPom = moduleDir.resolve(cleanSub).resolve("pom.xml").normalize();
+        if (Files.exists(directPom)) return directPom;
+
+        // 2. Module dans un sous-dossier portant le nom du profil : moduleDir/profileId/cleanSub/pom.xml
+        if (profileId != null && !profileId.isBlank()) {
+            Path profilePom = moduleDir.resolve(profileId).resolve(cleanSub).resolve("pom.xml").normalize();
+            if (Files.exists(profilePom)) return profilePom;
+        }
+
+        // 3. Recherche sous projectRoot d'un sous-dossier portant le nom du module
+        try (Stream<Path> walk = Files.walk(projectRoot, 6)) {
+            Optional<Path> found = walk
+                    .filter(Files::isDirectory)
+                    .filter(dir -> dir.getFileName() != null && dir.getFileName().toString().equalsIgnoreCase(cleanSub))
+                    .map(dir -> dir.resolve("pom.xml"))
+                    .filter(Files::exists)
+                    .findFirst();
+            if (found.isPresent()) return found.get();
+        } catch (Exception ignored) {}
+
+        return null;
+    }
+
+    private List<DeclaredModule> extractAllDeclaredModulesWithProfiles(Element root, Map<String, String> properties) {
+        List<DeclaredModule> modules = new ArrayList<>();
+
+        // 1. Modules directs sous <project><modules>
+        Element directModulesEl = getChildElement(root, "modules");
+        if (directModulesEl != null) {
+            NodeList list = directModulesEl.getElementsByTagName("module");
+            for (int i = 0; i < list.getLength(); i++) {
+                String text = list.item(i).getTextContent();
+                if (text != null && !text.isBlank()) {
+                    String resolved = resolveProperty(text.trim(), properties);
+                    if (resolved != null && !resolved.isBlank()) {
+                        modules.add(new DeclaredModule(resolved.trim(), null));
+                    }
                 }
             }
         }
+
+        // 2. Modules déclarés dans <profiles><profile>
+        NodeList profileNodes = root.getElementsByTagName("profile");
+        for (int i = 0; i < profileNodes.getLength(); i++) {
+            Node pNode = profileNodes.item(i);
+            if (pNode.getNodeType() == Node.ELEMENT_NODE) {
+                Element pEl = (Element) pNode;
+                String profileId = getTagValue(pEl, "id");
+                NodeList subMods = pEl.getElementsByTagName("module");
+                for (int j = 0; j < subMods.getLength(); j++) {
+                    String text = subMods.item(j).getTextContent();
+                    if (text != null && !text.isBlank()) {
+                        String resolved = resolveProperty(text.trim(), properties);
+                        if (resolved != null && !resolved.isBlank()) {
+                            modules.add(new DeclaredModule(resolved.trim(), profileId));
+                        }
+                    }
+                }
+            }
+        }
+
         return modules;
     }
 
