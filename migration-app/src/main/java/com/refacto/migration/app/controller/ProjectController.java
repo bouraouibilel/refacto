@@ -6,6 +6,7 @@ import com.refacto.migration.core.model.TargetProfile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.file.Path;
 import java.util.List;
 
 @RestController
@@ -21,12 +22,35 @@ public class ProjectController {
 
     public record CreateProjectRequest(String name, String repositoryPath, String branch) {}
 
+    @PostMapping("/demo")
+    public ResponseEntity<MigrationOrchestratorService.AnalysisContext> runDemoAnalysis() {
+        Path samplePath = resolveDemoPath();
+        Project project = orchestrator.registerProject("Sample Legacy APP", samplePath.toAbsolutePath().toString(), "main");
+        MigrationOrchestratorService.AnalysisContext context = orchestrator.runFullAnalysis(project.id(), TargetProfile.defaultJava17Profile());
+        return ResponseEntity.ok(context);
+    }
+
+    private Path resolveDemoPath() {
+        Path direct = java.nio.file.Paths.get("sample-legacy-app");
+        if (java.nio.file.Files.exists(direct)) return direct;
+        Path parent = java.nio.file.Paths.get("../sample-legacy-app");
+        if (java.nio.file.Files.exists(parent)) return parent;
+        Path abs = java.nio.file.Paths.get("d:/work/sample/refacto/sample-legacy-app");
+        if (java.nio.file.Files.exists(abs)) return abs;
+        return direct;
+    }
+
     @PostMapping
     public ResponseEntity<Project> createProject(@RequestBody CreateProjectRequest request) {
+        String cleanPath = request.repositoryPath() != null ? request.repositoryPath().trim() : "";
+        if ((cleanPath.startsWith("\"") && cleanPath.endsWith("\"")) || (cleanPath.startsWith("'") && cleanPath.endsWith("'"))) {
+            cleanPath = cleanPath.substring(1, cleanPath.length() - 1).trim();
+        }
+
         Project project = orchestrator.registerProject(
                 request.name(),
-                request.repositoryPath(),
-                request.branch() != null ? request.branch() : "main"
+                cleanPath,
+                request.branch() != null && !request.branch().isBlank() ? request.branch() : "main"
         );
         return ResponseEntity.ok(project);
     }

@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
@@ -95,6 +96,15 @@ public class MigrationOrchestratorService {
         }
 
         Path rootPath = Paths.get(project.repositoryUri());
+        if (!Files.exists(rootPath)) {
+            Path fallback = Paths.get("..").resolve(project.repositoryUri()).normalize();
+            if (Files.exists(fallback)) {
+                rootPath = fallback;
+            } else {
+                throw new IllegalArgumentException("Chemin du projet introuvable : " + project.repositoryUri() +
+                        " (chemin absolu testé : " + rootPath.toAbsolutePath() + ")");
+            }
+        }
         log.info("Lancement de l'analyse complète pour {} sur {}", project.name(), rootPath);
 
         if (targetProfile == null) {
