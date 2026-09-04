@@ -962,9 +962,51 @@
                 }
                 pendingLeft = [];
                 pendingRight = [];
+        window.diffRowLimits = window.diffRowLimits || {};
+
+        function expandDiffLimit(index) {
+            window.diffRowLimits[index] = (window.diffRowLimits[index] || 250) + 500;
+            renderDiffsList();
+        }
+
+        function parseUnifiedDiffToSideBySide(unifiedDiff, maxRows = 250) {
+            if (!unifiedDiff) return { leftRows: [], rightRows: [], isTruncated: false, totalInputLines: 0 };
+            const lines = unifiedDiff.split(/\r?\n/);
+            const totalInputLines = lines.length;
+            const leftRows = [];
+            const rightRows = [];
+
+            let leftLineNum = 1;
+            let rightLineNum = 1;
+
+            let pendingLeft = [];
+            let pendingRight = [];
+
+            function flushPending() {
+                const maxLen = Math.max(pendingLeft.length, pendingRight.length);
+                for (let i = 0; i < maxLen; i++) {
+                    if (leftRows.length >= maxRows) break;
+                    if (i < pendingLeft.length) {
+                        leftRows.push(pendingLeft[i]);
+                    } else {
+                        leftRows.push({ lineNum: '', content: '', type: 'empty' });
+                    }
+
+                    if (i < pendingRight.length) {
+                        rightRows.push(pendingRight[i]);
+                    } else {
+                        rightRows.push({ lineNum: '', content: '', type: 'empty' });
+                    }
+                }
+                pendingLeft = [];
+                pendingRight = [];
             }
 
-            for (const raw of lines) {
+            for (let idx = 0; idx < lines.length; idx++) {
+                if (leftRows.length >= maxRows) {
+                    break;
+                }
+                const raw = lines[idx];
                 if (raw.startsWith('---') || raw.startsWith('+++')) continue;
 
                 if (raw.startsWith('@@')) {
@@ -993,7 +1035,12 @@
                 }
             }
             flushPending();
-            return { leftRows, rightRows };
+            return { 
+                leftRows, 
+                rightRows, 
+                isTruncated: totalInputLines > maxRows || leftRows.length >= maxRows, 
+                totalInputLines 
+            };
         }
 
         function setDiffViewMode(index, mode) {
@@ -1074,12 +1121,32 @@
                 `;
             }
 
+            let truncationBanner = '';
+            if (sbs.isTruncated) {
+                truncationBanner = `
+                <div class="p-3 bg-amber-50 border-t border-amber-200 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 shrink-0"></i>
+                        <span>Fichier très volumineux (<strong>${sbs.totalInputLines}</strong> lignes dans le patch). Affichage sécurisé des <strong>${max}</strong> premières lignes.</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="setDiffViewMode(${index}, 'uni')" class="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded font-semibold shadow-2xs">
+                            Voir le patch complet en mode texte brut
+                        </button>
+                        <button onclick="expandDiffLimit(${index})" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded font-semibold shadow-2xs">
+                            Charger +500 lignes
+                        </button>
+                    </div>
+                </div>
+                `;
+            }
+
             return `
-            <div class="overflow-x-auto border-t border-slate-200">
+            <div class="overflow-x-auto max-h-[650px] overflow-y-auto border-t border-slate-200">
                 <table class="w-full border-collapse">
-                    <thead class="bg-slate-100 text-slate-700 text-xs uppercase font-bold tracking-wider select-none border-b border-slate-300">
+                    <thead class="sticky top-0 bg-slate-100 text-slate-700 text-xs uppercase font-bold tracking-wider select-none border-b border-slate-300 z-10 shadow-2xs">
                         <tr>
-                            <th colspan="2" class="w-1/2 py-2 px-3 text-left border-r border-slate-300">
+                            <th colspan="2" class="w-1/2 py-2 px-3 text-left border-r border-slate-300 bg-slate-100">
                                 <div class="flex items-center justify-between">
                                     <span class="flex items-center space-x-1.5">
                                         <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
@@ -1088,7 +1155,7 @@
                                     <span class="text-[10px] text-slate-500 font-normal lowercase bg-white px-2 py-0.5 rounded border border-slate-200">legacy</span>
                                 </div>
                             </th>
-                            <th colspan="2" class="w-1/2 py-2 px-3 text-left">
+                            <th colspan="2" class="w-1/2 py-2 px-3 text-left bg-slate-100">
                                 <div class="flex items-center justify-between">
                                     <span class="flex items-center space-x-1.5">
                                         <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
@@ -1103,6 +1170,7 @@
                         ${rowsHtml}
                     </tbody>
                 </table>
+                ${truncationBanner}
             </div>
             `;
         }
@@ -1209,7 +1277,8 @@
 
             container.innerHTML = pageEntries.map((d, i) => {
                 const globalIndex = startIndex + i;
-                const sideBySide = parseUnifiedDiffToSideBySide(d.unifiedDiff || '');
+                const maxLimit = window.diffRowLimits[globalIndex] || 250;
+                const sideBySide = parseUnifiedDiffToSideBySide(d.unifiedDiff || '', maxLimit);
                 const sideBySideHtml = renderSideBySideTable(sideBySide, globalIndex);
 
                 return `
@@ -1245,7 +1314,7 @@
                         ${sideBySideHtml}
                     </div>
 
-                    <div id="diff-uni-${globalIndex}" class="hidden p-4 bg-slate-950">
+                    <div id="diff-uni-${globalIndex}" class="hidden p-4 bg-slate-950 max-h-[650px] overflow-y-auto">
                         <pre class="text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">${escapeHtml(d.unifiedDiff)}</pre>
                     </div>
                 </div>
