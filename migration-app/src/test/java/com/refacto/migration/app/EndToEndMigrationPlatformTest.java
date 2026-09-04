@@ -53,7 +53,7 @@ class EndToEndMigrationPlatformTest {
                 .filter(d -> d.artifactId().equals("spring-batch-core"))
                 .findFirst().orElseThrow();
         assertThat(batchDep.currentVersion()).contains("4.3.5");
-        assertThat(batchDep.targetVersion()).isEqualTo("5.x");
+        assertThat(batchDep.targetVersion()).isEqualTo("5.1.2");
         assertThat(batchDep.breakingChangeCount()).isGreaterThan(0);
 
         // 5. Verify Findings Detection across all rules

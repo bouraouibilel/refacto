@@ -48,7 +48,7 @@ class DependencyAnalyzerTest {
 
         assertThat(batchDep.conflict()).isTrue();
         assertThat(batchDep.currentVersion()).contains("4.3.0").contains("4.2.0");
-        assertThat(batchDep.targetVersion()).isEqualTo("5.x");
+        assertThat(batchDep.targetVersion()).isEqualTo("5.1.2");
         assertThat(batchDep.breakingChangeCount()).isGreaterThan(0);
         assertThat(batchDep.migrationStatus()).isEqualTo("BREAKING_MIGRATION");
         assertThat(batchDep.modules()).containsExactlyInAnyOrder("mod-a", "mod-b");

@@ -101,6 +101,7 @@ public class RecipeCatalogService {
         String statusStr = (String) map.getOrDefault("status", "APPROVED");
         String author = (String) map.getOrDefault("author", "Migration Team");
         String rationale = (String) map.getOrDefault("rationale", "");
+        String recipeClassName = (String) map.getOrDefault("recipeClassName", Recipe.computeRecipeClassName(id, name));
 
         return new Recipe(
                 id,
@@ -116,7 +117,8 @@ public class RecipeCatalogService {
                 tags,
                 com.refacto.migration.core.enums.RecipeStatus.valueOf(statusStr.toUpperCase()),
                 author,
-                rationale
+                rationale,
+                recipeClassName
         );
     }
 }

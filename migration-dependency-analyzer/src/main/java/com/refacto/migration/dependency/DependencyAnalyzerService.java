@@ -96,6 +96,15 @@ public class DependencyAnalyzerService {
     }
 
     public List<Dependency> buildInventory(List<ModuleDescriptor> modules, TargetProfile targetProfile) {
+        Set<String> internalArtifactIds = new HashSet<>();
+        Set<String> internalGroupIds = new HashSet<>();
+        for (ModuleDescriptor mod : modules) {
+            internalArtifactIds.add(mod.artifactId());
+            if (mod.groupId() != null && !mod.groupId().equals("unknown")) {
+                internalGroupIds.add(mod.groupId());
+            }
+        }
+
         Map<String, List<ModuleDepOccurrence>> occurrences = new HashMap<>();
 
         for (ModuleDescriptor module : modules) {
@@ -136,13 +145,12 @@ public class DependencyAnalyzerService {
             if (!distinctVersions.isEmpty()) {
                 currentVersion = String.join(" / ", distinctVersions);
             } else {
-                // Résolution fine de la version gérée via catalogue BOM
-                currentVersion = DEFAULT_LEGACY_VERSIONS.getOrDefault(coord, "2.x (géré par BOM)");
+                currentVersion = inferLegacyVersion(coord, groupId, artifactId, internalArtifactIds, internalGroupIds);
             }
 
             String targetVersion = resolveTargetVersion(groupId, artifactId, targetProfile);
             if (targetVersion == null) {
-                targetVersion = inferTargetVersion(groupId, artifactId, currentVersion, targetProfile);
+                targetVersion = inferTargetVersion(groupId, artifactId, currentVersion, targetProfile, internalArtifactIds, internalGroupIds);
             }
 
             LibraryMigrationSpec spec = MIGRATION_SPECS.get(coord);
@@ -193,6 +201,40 @@ public class DependencyAnalyzerService {
         return spec != null ? spec.breakingChanges() : Collections.emptyList();
     }
 
+    private String inferLegacyVersion(String coord, String groupId, String artifactId,
+                                      Set<String> internalArtifacts, Set<String> internalGroups) {
+        if (internalArtifacts.contains(artifactId) || internalGroups.contains(groupId)) {
+            return "${revision} (Projet)";
+        }
+        if (DEFAULT_LEGACY_VERSIONS.containsKey(coord)) {
+            return DEFAULT_LEGACY_VERSIONS.get(coord);
+        }
+        if (groupId.startsWith("org.springframework.boot")) return "2.7.18 (BOM)";
+        if (groupId.startsWith("org.springframework.batch")) return "4.3.8 (BOM)";
+        if (groupId.startsWith("org.springframework.security")) return "5.8.14 (BOM)";
+        if (groupId.startsWith("org.springframework.data")) return "2.7.18 (BOM)";
+        if (groupId.startsWith("org.springframework")) return "5.3.39 (BOM)";
+        if (groupId.startsWith("org.hibernate")) return "5.6.15.Final (BOM)";
+        if (groupId.startsWith("org.slf4j")) return "1.7.36 (BOM)";
+        if (groupId.startsWith("ch.qos.logback")) return "1.2.12 (BOM)";
+        if (groupId.startsWith("com.fasterxml.jackson")) return "2.13.5 (BOM)";
+        if (groupId.startsWith("org.projectlombok")) return "1.18.24 (BOM)";
+        if (groupId.startsWith("org.apache.commons") && artifactId.contains("lang")) return "3.12.0 (BOM)";
+        if (groupId.startsWith("org.apache.commons") && artifactId.contains("collections")) return "4.4 (BOM)";
+        if (groupId.contains("commons-io")) return "2.11.0 (BOM)";
+        if (groupId.contains("oracle") || artifactId.contains("ojdbc")) return "19.3.0.0 (BOM)";
+        if (groupId.contains("postgresql")) return "42.3.8 (BOM)";
+        if (groupId.contains("mockito")) return "3.12.4 (BOM)";
+        if (groupId.contains("assertj")) return "3.22.0 (BOM)";
+        if (groupId.contains("mapstruct")) return "1.4.2.Final (BOM)";
+        if (groupId.startsWith("javax.persistence")) return "2.2.3 (javax)";
+        if (groupId.startsWith("javax.servlet")) return "4.0.1 (javax)";
+        if (groupId.startsWith("javax.transaction")) return "1.3.3 (javax)";
+        if (groupId.startsWith("javax.annotation")) return "1.3.2 (javax)";
+
+        return "BOM Héritée (Parent POM)";
+    }
+
     private String resolveTargetVersion(String groupId, String artifactId, TargetProfile targetProfile) {
         if (targetProfile == null || targetProfile.targets() == null) {
             return null;
@@ -225,9 +267,36 @@ public class DependencyAnalyzerService {
         return null;
     }
 
-    private String inferTargetVersion(String groupId, String artifactId, String currentVersion, TargetProfile targetProfile) {
-        boolean isJava25 = targetProfile != null && "25".equals(targetProfile.targetJavaVersion());
+    private String inferTargetVersion(String groupId, String artifactId, String currentVersion,
+                                      TargetProfile targetProfile, Set<String> internalArtifacts, Set<String> internalGroups) {
+        if (internalArtifacts.contains(artifactId) || internalGroups.contains(groupId)) {
+            return "${revision}";
+        }
 
+        boolean isJava25 = targetProfile != null && "25".equals(targetProfile.targetJavaVersion());
+        String sbVer = targetProfile != null && targetProfile.targetSpringBootVersion() != null ?
+                targetProfile.targetSpringBootVersion() : "3.3.4";
+        String batchVer = targetProfile != null && targetProfile.targetSpringBatchVersion() != null ?
+                targetProfile.targetSpringBatchVersion() : "5.1.2";
+
+        if (groupId.startsWith("org.springframework.batch")) {
+            return batchVer;
+        }
+        if (groupId.startsWith("org.springframework.boot")) {
+            return sbVer;
+        }
+        if (groupId.startsWith("org.springframework")) {
+            return isJava25 ? "7.0.0-M1" : "6.1.13";
+        }
+        if (groupId.startsWith("org.hibernate")) {
+            return isJava25 ? "7.0.0.Alpha1" : "6.5.3.Final";
+        }
+        if (groupId.startsWith("org.slf4j")) {
+            return isJava25 ? "2.1.0" : "2.0.16";
+        }
+        if (groupId.startsWith("ch.qos.logback")) {
+            return isJava25 ? "1.5.12" : "1.5.8";
+        }
         if (groupId.startsWith("javax.persistence") || artifactId.contains("persistence-api")) {
             return isJava25 ? "3.2.0 (jakarta)" : "3.1.0 (jakarta)";
         }
@@ -249,6 +318,12 @@ public class DependencyAnalyzerService {
         if (groupId.contains("commons-lang")) {
             return "3.17.0";
         }
+        if (groupId.contains("commons-io")) {
+            return "2.16.1";
+        }
+        if (groupId.contains("commons-collections")) {
+            return "4.4";
+        }
         if (groupId.contains("oracle") || artifactId.contains("ojdbc")) {
             return "23.4.0.24.05";
         }
@@ -258,10 +333,19 @@ public class DependencyAnalyzerService {
         if (groupId.contains("mockito")) {
             return "5.11.0";
         }
+        if (groupId.contains("assertj")) {
+            return "3.26.3";
+        }
+        if (groupId.contains("mapstruct")) {
+            return "1.5.5.Final";
+        }
+        if (groupId.equals("junit") && artifactId.equals("junit")) {
+            return "5.10.3 (Jupiter)";
+        }
 
-        // Si aucune règle spécifique mais version ancienne détectée
+        // Si la version actuelle est héritée de la BOM legacy, aligner précisément sur la version de la BOM cible
         if (currentVersion.contains("BOM") || currentVersion.startsWith("1.") || currentVersion.startsWith("2.")) {
-            return "Alignee sur cible";
+            return sbVer + " (BOM Cible)";
         }
 
         return currentVersion;

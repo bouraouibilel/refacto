@@ -173,7 +173,7 @@ public class MavenProjectDiscoveryService {
             List<String> dependencies = extractDependencies(root, properties, managedVersions);
 
             // Framework detection
-            Set<String> frameworks = detectFrameworks(dependencies, root);
+            Set<String> frameworks = detectFrameworks(dependencies, root, artifactId);
             boolean hasSpringBatch = frameworks.contains("Spring Batch");
             boolean hasJpa = frameworks.contains("JPA") || frameworks.contains("Hibernate");
 
@@ -403,29 +403,45 @@ public class MavenProjectDiscoveryService {
     }
 
     private void extractDependencyManagement(Element root, Map<String, String> properties, Map<String, String> managedVersions) {
-        Element depMgmtEl = getChildElement(root, "dependencyManagement");
-        if (depMgmtEl != null) {
-            Element depsEl = getChildElement(depMgmtEl, "dependencies");
-            if (depsEl != null) {
-                NodeList deps = depsEl.getElementsByTagName("dependency");
-                for (int i = 0; i < deps.getLength(); i++) {
-                    Node node = deps.item(i);
-                    if (node.getNodeType() == Node.ELEMENT_NODE) {
-                        Element dep = (Element) node;
-                        String g = resolveProperty(getTagValue(dep, "groupId"), properties);
-                        String a = resolveProperty(getTagValue(dep, "artifactId"), properties);
-                        String v = resolveProperty(getTagValue(dep, "version"), properties);
-                        if (g != null && a != null && v != null) {
-                            managedVersions.put(g + ":" + a, v);
-                        }
+        extractDepMgmtFromElement(getChildElement(root, "dependencyManagement"), properties, managedVersions);
+
+        Element profilesEl = getChildElement(root, "profiles");
+        if (profilesEl != null) {
+            NodeList profiles = profilesEl.getElementsByTagName("profile");
+            for (int i = 0; i < profiles.getLength(); i++) {
+                Node pNode = profiles.item(i);
+                if (pNode.getNodeType() == Node.ELEMENT_NODE) {
+                    extractDepMgmtFromElement(getChildElement((Element) pNode, "dependencyManagement"), properties, managedVersions);
+                }
+            }
+        }
+    }
+
+    private void extractDepMgmtFromElement(Element depMgmtEl, Map<String, String> properties, Map<String, String> managedVersions) {
+        if (depMgmtEl == null) return;
+        Element depsEl = getChildElement(depMgmtEl, "dependencies");
+        if (depsEl != null) {
+            NodeList deps = depsEl.getElementsByTagName("dependency");
+            for (int i = 0; i < deps.getLength(); i++) {
+                Node node = deps.item(i);
+                if (node.getNodeType() == Node.ELEMENT_NODE) {
+                    Element dep = (Element) node;
+                    String g = resolveProperty(getTagValue(dep, "groupId"), properties);
+                    String a = resolveProperty(getTagValue(dep, "artifactId"), properties);
+                    String v = resolveProperty(getTagValue(dep, "version"), properties);
+                    if (g != null && a != null && v != null) {
+                        managedVersions.put(g + ":" + a, v);
                     }
                 }
             }
         }
     }
 
-    private Set<String> detectFrameworks(List<String> dependencies, Element root) {
+    private Set<String> detectFrameworks(List<String> dependencies, Element root, String artifactId) {
         Set<String> frameworks = new HashSet<>();
+        if (artifactId != null && artifactId.toLowerCase().contains("batch")) {
+            frameworks.add("Spring Batch");
+        }
         for (String dep : dependencies) {
             if (dep.contains("spring-boot")) frameworks.add("Spring Boot");
             if (dep.contains("spring-batch")) frameworks.add("Spring Batch");

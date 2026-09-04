@@ -1,10 +1,12 @@
 package com.refacto.migration.core.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.refacto.migration.core.enums.AutomationLevel;
 import com.refacto.migration.core.enums.Category;
 import com.refacto.migration.core.enums.FindingStatus;
 import com.refacto.migration.core.enums.Severity;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record Finding(
         String id,
         String projectId,
@@ -78,5 +80,9 @@ public record Finding(
                 null,
                 null
         );
+    }
+
+    public String getRecipeClassName() {
+        return Recipe.computeRecipeClassName(recipeId, null);
     }
 }

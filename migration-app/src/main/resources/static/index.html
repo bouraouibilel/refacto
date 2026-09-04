@@ -255,16 +255,23 @@
 
         <!-- 4. FINDINGS VIEW -->
         <section id="view-findings" class="space-y-6 hidden">
-            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
                     <div>
-                        <h3 class="font-bold text-slate-900 text-lg">Inspecteur de Findings Techniques</h3>
-                        <p class="text-xs text-slate-500">Règles déclenchées, niveaux d'automatisation, explicabilité et actions recommandées.</p>
+                        <div class="flex items-center space-x-2">
+                            <h3 class="font-bold text-slate-900 text-lg">Inspecteur de Findings Techniques</h3>
+                            <span id="findingsCountBadge2" class="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded-full font-mono">0 finding</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5">Règles déclenchées, classes Recipe associées, explicabilité et actions recommandées.</p>
                     </div>
 
-                    <!-- Filters -->
-                    <div class="flex items-center space-x-3 text-xs">
-                        <select id="filterCategory" onchange="filterFindings()" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg">
+                    <!-- Filters Toolbar -->
+                    <div class="flex flex-wrap items-center gap-2 text-xs">
+                        <div class="relative">
+                            <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+                            <input type="text" id="filterFindingSearch" oninput="filterFindings()" placeholder="Filtrer par règle, classe recipe, fichier..." class="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 w-64">
+                        </div>
+                        <select id="filterCategory" onchange="filterFindings()" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium">
                             <option value="">Toutes catégories</option>
                             <option value="DATABASE">Base de données (APP-DB)</option>
                             <option value="CODE">Modernisation Code (APP-CODE)</option>
@@ -272,7 +279,7 @@
                             <option value="JAVA17">Java 17 Modernisation</option>
                             <option value="FRAMEWORK">Frameworks</option>
                         </select>
-                        <select id="filterSeverity" onchange="filterFindings()" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg">
+                        <select id="filterSeverity" onchange="filterFindings()" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium">
                             <option value="">Toutes sévérités</option>
                             <option value="CRITICAL">CRITICAL</option>
                             <option value="HIGH">HIGH</option>
@@ -282,7 +289,7 @@
                     </div>
                 </div>
 
-                <div id="findingsList" class="space-y-4">
+                <div id="findingsList" class="space-y-4 pt-1">
                     <div class="text-sm text-slate-400">Aucun finding à afficher.</div>
                 </div>
             </div>
@@ -829,34 +836,84 @@
             }).join('');
         }
 
-        function renderFindings(findings) {
-            const container = document.getElementById('findingsList');
-            if (!findings || findings.length === 0) {
-                container.innerHTML = '<div class="text-sm text-slate-400">Aucun finding détecté.</div>';
+        function filterFindings() {
+            if (!currentAnalysis || !currentAnalysis.findings) {
                 return;
             }
+            const catSelect = document.getElementById('filterCategory');
+            const sevSelect = document.getElementById('filterSeverity');
+            const searchInput = document.getElementById('filterFindingSearch');
+
+            const cat = catSelect ? catSelect.value : '';
+            const sev = sevSelect ? sevSelect.value : '';
+            const query = searchInput ? (searchInput.value || '').toLowerCase().trim() : '';
+
+            const filtered = currentAnalysis.findings.filter(f => {
+                if (cat && f.category !== cat) return false;
+                if (sev && f.severity !== sev) return false;
+                if (query) {
+                    const matchText = (
+                        (f.recipeId || '') + ' ' +
+                        (f.recipeName || '') + ' ' +
+                        (f.recipeClassName || '') + ' ' +
+                        (f.description || '') + ' ' +
+                        (f.filePath || '') + ' ' +
+                        (f.symbol || '') + ' ' +
+                        (f.moduleName || '')
+                    ).toLowerCase();
+                    if (!matchText.includes(query)) return false;
+                }
+                return true;
+            });
+
+            const countBadge = document.getElementById('findingsCountBadge2');
+            if (countBadge) {
+                countBadge.innerText = `${filtered.length} finding${filtered.length > 1 ? 's' : ''}${filtered.length !== currentAnalysis.findings.length ? ' (filtrés)' : ''}`;
+            }
+
+            renderFindingsList(filtered);
+        }
+
+        function renderFindings(findings) {
+            filterFindings();
+        }
+
+        function renderFindingsList(findings) {
+            const container = document.getElementById('findingsList');
+            if (!findings || findings.length === 0) {
+                container.innerHTML = '<div class="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400 text-sm">Aucun finding technique ne correspond aux critères sélectionnés.</div>';
+                return;
+            }
+
             container.innerHTML = findings.map(f => {
                 const sevColor = f.severity === 'CRITICAL' ? 'border-l-red-600 text-red-600' :
                         (f.severity === 'HIGH' ? 'border-l-orange-500 text-orange-600' : 'border-l-amber-500 text-amber-600');
 
+                const recipeClass = f.recipeClassName || f.recipeId;
+
                 return `
-                <div class="p-4 rounded-xl border border-slate-200 border-l-4 ${sevColor} bg-white shadow-sm space-y-2">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-2">
+                <div class="p-4 rounded-xl border border-slate-200 border-l-4 ${sevColor} bg-white shadow-sm space-y-2.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center space-x-2">
                             <span class="font-bold text-xs px-2 py-0.5 bg-slate-100 text-slate-800 rounded font-mono">${escapeHtml(f.recipeId)}</span>
-                            <span class="text-xs font-semibold uppercase px-2 py-0.5 rounded ${f.severity === 'HIGH' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}">${escapeHtml(f.severity)}</span>
+                            <span class="text-xs font-semibold uppercase px-2 py-0.5 rounded ${f.severity === 'HIGH' ? 'bg-red-50 text-red-700' : (f.severity === 'CRITICAL' ? 'bg-rose-100 text-rose-800' : 'bg-amber-50 text-amber-700')}">${escapeHtml(f.severity)}</span>
+                            <span class="text-xs text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded font-mono font-semibold flex items-center space-x-1">
+                                <i data-lucide="code" class="w-3 h-3 text-purple-600"></i>
+                                <span>${escapeHtml(recipeClass)}.java</span>
+                            </span>
                             <span class="text-xs text-slate-500 font-mono">${escapeHtml(f.automationLevel)} &bull; Confiance: ${f.confidence}%</span>
                         </div>
-                        <button onclick="askAiAboutFinding('${escapeHtml(f.id)}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 flex items-center space-x-1">
+                        <button onclick="askAiAboutFinding('${escapeHtml(f.id)}')" class="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-medium rounded-lg border border-purple-200 flex items-center space-x-1 transition">
                             <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
                             <span>Expliquer avec l'IA</span>
                         </button>
                     </div>
 
-                    <div class="font-semibold text-slate-800 text-sm">${escapeHtml(f.description)}</div>
-                    <div class="text-xs text-slate-500 flex items-center space-x-2">
+                    <div class="font-semibold text-slate-900 text-sm">${escapeHtml(f.description)}</div>
+                    <div class="text-xs text-slate-500 flex flex-wrap items-center gap-2">
                         <span>Fichier :</span>
-                        <code class="text-slate-700 bg-slate-100 px-1 py-0.5 rounded">${escapeHtml(f.filePath)}:${f.startLine}</code>
+                        <code class="text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded font-mono">${escapeHtml(f.filePath)}:${f.startLine}</code>
+                        ${f.moduleName ? `<span class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-mono text-[11px]">${escapeHtml(f.moduleName)}</span>` : ''}
                         ${f.potentialRoundTrips ? `<span class="text-red-600 font-semibold">&bull; ~${f.potentialRoundTrips} round-trips estimés</span>` : ''}
                     </div>
 
@@ -869,7 +926,10 @@
                         <pre class="bg-slate-900 text-slate-100 p-2.5 rounded-lg text-xs overflow-x-auto font-mono">${escapeHtml(f.codeSnippet)}</pre>
                     ` : ''}
                 </div>
-            `}).join('');
+                `;
+            }).join('');
+
+            lucide.createIcons();
         }
 
         async function loadRecipes() {
@@ -878,10 +938,15 @@
                 const recipes = await res.json();
                 const container = document.getElementById('recipesContainer');
                 if (container) {
-                    container.innerHTML = recipes.map(r => `
+                    container.innerHTML = recipes.map(r => {
+                        const recipeClass = r.recipeClassName || r.id;
+                        return `
                         <div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-2">
                             <div class="flex items-center justify-between">
-                                <span class="text-xs font-bold font-mono text-blue-600">${escapeHtml(r.id)}</span>
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-xs font-bold font-mono text-blue-600">${escapeHtml(r.id)}</span>
+                                    <span class="text-[11px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 font-semibold">${escapeHtml(recipeClass)}.java</span>
+                                </div>
                                 <span class="text-xs px-2 py-0.5 rounded-full font-semibold ${r.severity === 'CRITICAL' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}">${escapeHtml(r.severity)}</span>
                             </div>
                             <h4 class="font-bold text-slate-900 text-sm">${escapeHtml(r.name)}</h4>
@@ -891,7 +956,8 @@
                                 <span>Confiance : <strong>${r.confidenceScore}%</strong></span>
                             </div>
                         </div>
-                    `).join('');
+                    `}).join('');
+                    lucide.createIcons();
                 }
 
                 const packsRes = await fetch('/api/recipes/packs');
@@ -1257,6 +1323,7 @@
                     <div class="px-5 py-3.5 bg-slate-100/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
                         <div class="flex items-center space-x-2.5">
                             <span class="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded font-mono">${escapeHtml(d.recipeId)}</span>
+                            <span class="text-[11px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 font-semibold">${escapeHtml(d.recipeClassName || d.recipeId)}.java</span>
                             <span class="font-bold text-slate-900 text-sm font-mono flex items-center space-x-1.5">
                                 <i data-lucide="file-code" class="w-4 h-4 text-slate-500"></i>
                                 <span>${escapeHtml(d.filePath)}</span>

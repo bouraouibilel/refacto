@@ -1,8 +1,10 @@
 package com.refacto.migration.core.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.refacto.migration.core.enums.AutomationLevel;
 import com.refacto.migration.core.enums.ChangeStatus;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record DiffEntry(
         String id,
         String findingId,
@@ -43,5 +45,9 @@ public record DiffEntry(
                 null,
                 explanation
         );
+    }
+
+    public String getRecipeClassName() {
+        return Recipe.computeRecipeClassName(recipeId, recipeName);
     }
 }
