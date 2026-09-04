@@ -933,35 +933,6 @@
             `).join('');
         }
 
-        function parseUnifiedDiffToSideBySide(unifiedDiff) {
-            if (!unifiedDiff) return { leftRows: [], rightRows: [] };
-            const lines = unifiedDiff.split(/\r?\n/);
-            const leftRows = [];
-            const rightRows = [];
-
-            let leftLineNum = 1;
-            let rightLineNum = 1;
-
-            let pendingLeft = [];
-            let pendingRight = [];
-
-            function flushPending() {
-                const maxLen = Math.max(pendingLeft.length, pendingRight.length);
-                for (let i = 0; i < maxLen; i++) {
-                    if (i < pendingLeft.length) {
-                        leftRows.push(pendingLeft[i]);
-                    } else {
-                        leftRows.push({ lineNum: '', content: '', type: 'empty' });
-                    }
-
-                    if (i < pendingRight.length) {
-                        rightRows.push(pendingRight[i]);
-                    } else {
-                        rightRows.push({ lineNum: '', content: '', type: 'empty' });
-                    }
-                }
-                pendingLeft = [];
-                pendingRight = [];
         window.diffRowLimits = window.diffRowLimits || {};
 
         function expandDiffLimit(index) {
