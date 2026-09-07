@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -71,6 +72,19 @@ public class PaymentProcessor implements ItemProcessor<PaymentEntity, PaymentEnt
                 fis.close();
             }
         }
+    }
+
+    // JAVA17-003: Nested loop that can be modernized with Stream API
+    public List<PaymentEntity> filterHighValueTransactions(List<List<PaymentEntity>> paymentBatches) {
+        List<PaymentEntity> highValue = new ArrayList<>();
+        for (List<PaymentEntity> batch : paymentBatches) {
+            for (PaymentEntity payment : batch) {
+                if (payment.getAmount() != null && payment.getAmount().compareTo(new BigDecimal("1000")) > 0) {
+                    highValue.add(payment);
+                }
+            }
+        }
+        return highValue;
     }
 
     // Dummy inner helpers to demonstrate responsibilities

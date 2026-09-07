@@ -65,4 +65,95 @@ class TransformationEngineTest {
         assertThat(updatedFileContent).contains("jakarta.persistence.Entity");
         assertThat(updatedFileContent).doesNotContain("javax.persistence.Entity");
     }
+
+    @Test
+    void shouldTransformTryFinallyToTryWithResources() {
+        String code = """
+                package com.sample;
+                import java.io.*;
+                public class FileService {
+                    public void readFile(File file) throws IOException {
+                        FileInputStream fis = null;
+                        try {
+                            fis = new FileInputStream(file);
+                            fis.read();
+                        } finally {
+                            if (fis != null) {
+                                fis.close();
+                            }
+                        }
+                    }
+                }
+                """;
+
+        Finding finding = Finding.of(
+                "F-2", "batch-payment", "JAVA17-001", "1.0",
+                Category.JAVA17, Severity.MEDIUM, 95, AutomationLevel.AUTO_SAFE,
+                "FileService.java", 5, 13, "try-finally",
+                "Conversion try-finally vers try-with-resources", "Clean code",
+                "Fix", "Use try-with-resources", 1.0, "Low", code
+        );
+
+        AstTransformerService transformer = new AstTransformerService();
+        var transformed = transformer.transformCode(code, finding);
+
+        assertThat(transformed).isPresent();
+        String result = transformed.get();
+        assertThat(result).contains("try (FileInputStream fis = new FileInputStream(file))");
+        assertThat(result).contains("fis.read();");
+        assertThat(result).doesNotContain("finally");
+        assertThat(result).doesNotContain("fis.close()");
+    }
+
+    @Test
+    void shouldTransformNestedLoopsToStream() {
+        String code = """
+                package com.sample;
+                import java.util.List;
+                import java.util.ArrayList;
+                public class BatchProcessor {
+                    public List<String> process(List<List<String>> groups) {
+                        List<String> results = new ArrayList<>();
+                        for (List<String> group : groups) {
+                            for (String item : group) {
+                                if (item.startsWith("OK")) {
+                                    results.add(item);
+                                }
+                            }
+                        }
+                        return results;
+                    }
+                }
+                """;
+
+        Finding finding = Finding.of(
+                "F-3", "batch-payment", "JAVA17-003", "1.0",
+                Category.JAVA17, Severity.LOW, 95, AutomationLevel.AUTO_SAFE,
+                "BatchProcessor.java", 7, 14, "nested-loop",
+                "Boucle imbriquee vers stream", "Clean code",
+                "Fix", "Use streams", 1.0, "Low", code
+        );
+
+        AstTransformerService transformer = new AstTransformerService();
+        var transformed = transformer.transformCode(code, finding);
+
+        assertThat(transformed).isPresent();
+        String result = transformed.get();
+        assertThat(result).contains(".stream()");
+        assertThat(result).contains(".flatMap(");
+        assertThat(result).contains(".filter(");
+        assertThat(result).contains(".toList()");
+    }
+
+    @Test
+    void shouldIgnoreWhitespaceOnlyDiffs() {
+        DiffGeneratorService diffGen = new DiffGeneratorService();
+
+        String original = "public class A {\n    int x = 1;\n}\n";
+        String sameCodeDifferentSpacing = "public class A {\n\n        int x = 1;\n\n}\n";
+        String realChange = "public class A {\n    int x = 2;\n}\n";
+
+        assertThat(diffGen.hasMeaningfulChanges(original, sameCodeDifferentSpacing)).isFalse();
+        assertThat(diffGen.hasMeaningfulChanges(original, realChange)).isTrue();
+    }
 }

@@ -30,4 +30,18 @@ public class DiffGeneratorService {
 
         return String.join("\n", unifiedDiff);
     }
+
+    /**
+     * Vérifie si la modification contient de réels changements de code
+     * et non de simples variations d'espacement, d'indentation ou de saut de ligne.
+     */
+    public boolean hasMeaningfulChanges(String originalContent, String revisedContent) {
+        if (originalContent == null && revisedContent == null) return false;
+        if (originalContent == null || revisedContent == null) return true;
+
+        String normOriginal = originalContent.replaceAll("\\s+", "");
+        String normRevised = revisedContent.replaceAll("\\s+", "");
+
+        return !normOriginal.equals(normRevised);
+    }
 }

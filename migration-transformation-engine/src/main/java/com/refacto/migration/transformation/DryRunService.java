@@ -49,7 +49,9 @@ public class DryRunService {
                         String originalContent = FileUtils.readFileToString(targetFile.toFile(), StandardCharsets.UTF_8);
                         Optional<String> transformed = astTransformer.transformCode(originalContent, finding);
 
-                        if (transformed.isPresent() && !transformed.get().equals(originalContent)) {
+                        if (transformed.isPresent() 
+                                && !transformed.get().equals(originalContent)
+                                && diffGenerator.hasMeaningfulChanges(originalContent, transformed.get())) {
                             String unifiedDiff = diffGenerator.generateUnifiedDiff(
                                     finding.filePath(),
                                     originalContent,

@@ -254,6 +254,35 @@ public class CodeAnalyzerService {
                 }
             }
         });
+
+        // JAVA17-003: Boucles imbriquées vers Stream API (LoopToStreamModernizationRecipe)
+        cid.findAll(com.github.javaparser.ast.stmt.ForEachStmt.class).forEach(outerLoop -> {
+            if (outerLoop.getParentNode().flatMap(p -> p.findAncestor(com.github.javaparser.ast.stmt.ForEachStmt.class)).isPresent()) {
+                return;
+            }
+            List<com.github.javaparser.ast.stmt.ForEachStmt> innerLoops = outerLoop.getBody().findAll(com.github.javaparser.ast.stmt.ForEachStmt.class);
+            if (!innerLoops.isEmpty()) {
+                com.github.javaparser.ast.stmt.ForEachStmt innerLoop = innerLoops.get(0);
+                findings.add(new Finding(
+                        "JAVA17-003-" + UUID.randomUUID().toString().substring(0, 8),
+                        null, null, moduleName,
+                        "JAVA17-003", "1.0",
+                        Category.JAVA17, Severity.LOW, 95,
+                        AutomationLevel.AUTO_SAFE,
+                        relativePath,
+                        outerLoop.getBegin().map(p -> p.line).orElse(1),
+                        innerLoop.getEnd().map(p -> p.line).orElse(1),
+                        "nested-for-loop",
+                        "Boucle for imbriquée détectée. Remplacer par un pipeline Stream avec flatMap / filter / toList.",
+                        "Les Streams réduisent la complexité cyclomatique et évitent les accumulateurs mutables.",
+                        "Modernisation Java 17 Stream API",
+                        "Convertir en collection.stream().flatMap(...).filter(...).toList()",
+                        1.0, "Low", FindingStatus.OPEN,
+                        outerLoop.toString().substring(0, Math.min(outerLoop.toString().length(), 150)) + "...",
+                        null, null
+                ));
+            }
+        });
     }
 
     /**

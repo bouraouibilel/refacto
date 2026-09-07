@@ -90,6 +90,9 @@ class EndToEndMigrationPlatformTest {
         // JAVA17-002 (File -> Path)
         assertThat(findings).anyMatch(f -> f.recipeId().equals("JAVA17-002"));
 
+        // JAVA17-003 (Boucles imbriquees -> Stream API)
+        assertThat(findings).anyMatch(f -> f.recipeId().equals("JAVA17-003") && f.category() == Category.JAVA17);
+
         // JAVA17-007 (Optional JPA)
         assertThat(findings).anyMatch(f -> f.recipeId().equals("JAVA17-007") && f.severity() == Severity.HIGH);
 
