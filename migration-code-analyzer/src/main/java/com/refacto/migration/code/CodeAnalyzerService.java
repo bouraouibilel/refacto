@@ -56,6 +56,7 @@ public class CodeAnalyzerService {
         for (ClassOrInterfaceDeclaration cid : cu.findAll(ClassOrInterfaceDeclaration.class)) {
             checkSingleResponsibility(cid, relativePath, moduleName, findings);
             checkAbstractionLevel(cid, relativePath, moduleName, findings);
+            checkBatchModernization(cid, relativePath, moduleName, findings);
             checkJava17Modernization(cid, relativePath, moduleName, findings);
             checkNullSafetyAndOptional(cid, relativePath, moduleName, findings);
         }
@@ -283,6 +284,77 @@ public class CodeAnalyzerService {
                 ));
             }
         });
+
+        // JAVA17-004: Switch statement -> Switch expression
+        cid.findAll(com.github.javaparser.ast.stmt.SwitchStmt.class).forEach(switchStmt -> {
+            findings.add(new Finding(
+                    "JAVA17-004-" + UUID.randomUUID().toString().substring(0, 8),
+                    null, null, moduleName,
+                    "JAVA17-004", "1.0",
+                    Category.JAVA17, Severity.LOW, 90,
+                    AutomationLevel.AUTO_SAFE,
+                    relativePath,
+                    switchStmt.getBegin().map(p -> p.line).orElse(1),
+                    switchStmt.getEnd().map(p -> p.line).orElse(1),
+                    "switch-statement",
+                    "Switch statement verbeux détecté. Remplacer par une switch expression Java 17 (syntaxe ->).",
+                    "Les switch expressions Java 17 garantissent l'exhaustivité, évitent les oublis de 'break' (fall-through involontaire) et réduisent la verbosité.",
+                    "Modernisation standard Java 17",
+                    "Remplacer par switch (...) { case X -> ...; }",
+                    0.5, "Low", FindingStatus.OPEN,
+                    switchStmt.toString().substring(0, Math.min(switchStmt.toString().length(), 150)) + "...",
+                    null, null
+            ));
+        });
+    }
+
+    /**
+     * APP-BATCH-001 & APP-BATCH-002: Modernisation Spring Batch 5 (JobBuilderFactory & StepBuilderFactory)
+     */
+    private void checkBatchModernization(ClassOrInterfaceDeclaration cid, String relativePath, String moduleName, List<Finding> findings) {
+        cid.findAll(FieldDeclaration.class).stream()
+                .filter(f -> f.getElementType().asString().contains("JobBuilderFactory"))
+                .forEach(field -> {
+                    findings.add(new Finding(
+                            "APP-BATCH-001-" + UUID.randomUUID().toString().substring(0, 8),
+                            null, null, moduleName,
+                            "APP-BATCH-001", "1.0",
+                            Category.FRAMEWORK, Severity.HIGH, 98,
+                            AutomationLevel.AUTO_SAFE,
+                            relativePath,
+                            field.getBegin().map(p -> p.line).orElse(1),
+                            field.getEnd().map(p -> p.line).orElse(1),
+                            field.toString().trim(),
+                            "Usage de 'JobBuilderFactory' déprécié dans Spring Batch 5. Remplacer par 'new JobBuilder(name, jobRepository)'.",
+                            "Spring Batch 5 a supprimé les factories d'injection en faveur de constructeurs directs avec JobRepository explicite.",
+                            "Incompatibilité Spring Batch 5",
+                            "Instancier directement new JobBuilder(name, jobRepository) et injecter JobRepository",
+                            2.0, "Medium", FindingStatus.OPEN,
+                            field.toString().trim(), null, null
+                    ));
+                });
+
+        cid.findAll(FieldDeclaration.class).stream()
+                .filter(f -> f.getElementType().asString().contains("StepBuilderFactory"))
+                .forEach(field -> {
+                    findings.add(new Finding(
+                            "APP-BATCH-002-" + UUID.randomUUID().toString().substring(0, 8),
+                            null, null, moduleName,
+                            "APP-BATCH-002", "1.0",
+                            Category.FRAMEWORK, Severity.HIGH, 98,
+                            AutomationLevel.AUTO_SAFE,
+                            relativePath,
+                            field.getBegin().map(p -> p.line).orElse(1),
+                            field.getEnd().map(p -> p.line).orElse(1),
+                            field.toString().trim(),
+                            "Usage de 'StepBuilderFactory' déprécié dans Spring Batch 5. Remplacer par 'new StepBuilder(name, jobRepository)'.",
+                            "Spring Batch 5 requiert un JobRepository explicite et un PlatformTransactionManager lors de la construction des steps.",
+                            "Incompatibilité Spring Batch 5",
+                            "Instancier directement new StepBuilder(name, jobRepository) et spécifier transactionManager",
+                            2.0, "Medium", FindingStatus.OPEN,
+                            field.toString().trim(), null, null
+                    ));
+                });
     }
 
     /**

@@ -151,5 +151,24 @@ class EndToEndMigrationPlatformTest {
         assertThat(html).contains("Sample Legacy APP").contains("APP-DB-001");
         assertThat(md).contains("Score de Risque").contains("paymentJob");
         assertThat(json).contains("executiveSummary");
+
+        // 12. Full Analysis Snapshot Export & Import
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+                .findAndRegisterModules()
+                .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        String exportedJson = mapper.writeValueAsString(context);
+        assertThat(exportedJson).contains("paymentJob").contains("JAVA17-003");
+
+        MigrationOrchestratorService.AnalysisContext imported = mapper.readValue(
+                exportedJson,
+                MigrationOrchestratorService.AnalysisContext.class
+        );
+        assertThat(imported.analysisId()).isEqualTo(context.analysisId());
+        assertThat(imported.modules()).hasSize(context.modules().size());
+        assertThat(imported.findings()).hasSize(context.findings().size());
+        assertThat(imported.riskAssessment().score()).isEqualTo(context.riskAssessment().score());
+
+        MigrationOrchestratorService.AnalysisContext registered = orchestrator.importAnalysis(imported);
+        assertThat(orchestrator.getAnalysis(registered.analysisId())).isPresent();
     }
 }

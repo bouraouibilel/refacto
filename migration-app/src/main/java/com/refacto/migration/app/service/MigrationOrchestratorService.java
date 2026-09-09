@@ -181,6 +181,20 @@ public class MigrationOrchestratorService {
         return analyses.values().stream().reduce((first, second) -> second);
     }
 
+    public AnalysisContext importAnalysis(AnalysisContext importedCtx) {
+        if (importedCtx == null) {
+            throw new IllegalArgumentException("Le contexte d'analyse importé ne peut pas être null");
+        }
+        if (importedCtx.project() != null) {
+            projects.put(importedCtx.project().id(), importedCtx.project());
+        }
+        analyses.put(importedCtx.analysisId(), importedCtx);
+        log.info("Analyse {} importée avec succès (Projet: {})",
+                importedCtx.analysisId(),
+                importedCtx.project() != null ? importedCtx.project().name() : "N/A");
+        return importedCtx;
+    }
+
     public void addPerformanceComparison(String analysisId, PerformanceComparison comparison) {
         AnalysisContext ctx = analyses.get(analysisId);
         if (ctx != null) {

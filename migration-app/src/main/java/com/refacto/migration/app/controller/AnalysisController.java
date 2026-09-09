@@ -174,4 +174,46 @@ public class AnalysisController {
             return ResponseEntity.notFound().build();
         }
     }
+
+    @GetMapping(value = "/{id}/export", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<MigrationOrchestratorService.AnalysisContext> exportAnalysis(@PathVariable String id) {
+        return orchestrator.getAnalysis(id)
+                .map(ctx -> {
+                    String projectName = ctx.project() != null ? ctx.project().name().replaceAll("[^a-zA-Z0-9.-]", "_") : "project";
+                    String filename = "analysis-" + id + "-" + projectName + ".refacto.json";
+                    return ResponseEntity.ok()
+                            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                            .body(ctx);
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping(value = "/import", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<MigrationOrchestratorService.AnalysisContext> importAnalysisJson(
+            @RequestBody MigrationOrchestratorService.AnalysisContext context
+    ) {
+        try {
+            return ResponseEntity.ok(orchestrator.importAnalysis(context));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @PostMapping(value = "/import/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<MigrationOrchestratorService.AnalysisContext> importAnalysisFile(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file
+    ) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.findAndRegisterModules();
+            mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            MigrationOrchestratorService.AnalysisContext ctx = mapper.readValue(
+                    file.getInputStream(),
+                    MigrationOrchestratorService.AnalysisContext.class
+            );
+            return ResponseEntity.ok(orchestrator.importAnalysis(ctx));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
 }

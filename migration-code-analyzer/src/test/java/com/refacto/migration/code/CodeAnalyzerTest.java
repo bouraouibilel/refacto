@@ -86,4 +86,45 @@ class CodeAnalyzerTest {
 
         assertThat(findings).anyMatch(f -> f.recipeId().equals("JAVA17-001") && f.automationLevel() == AutomationLevel.AUTO_SAFE);
     }
+
+    @Test
+    void shouldDetectNestedLoops(@TempDir Path tempDir) throws Exception {
+        Path javaDir = tempDir.resolve("src/main/java/com/sample");
+        javaDir.toFile().mkdirs();
+
+        String code = """
+                package com.sample;
+                import java.util.List;
+                import java.util.ArrayList;
+
+                public class LoopTest {
+                    public List<String> process(List<List<String>> matrix) {
+                        List<String> res = new ArrayList<>();
+                        for (List<String> row : matrix) {
+                            for (String cell : row) {
+                                res.add(cell);
+                            }
+                        }
+                        return res;
+                    }
+                }
+                """;
+        FileUtils.writeStringToFile(javaDir.resolve("LoopTest.java").toFile(), code, StandardCharsets.UTF_8);
+
+        CodeAnalyzerService service = new CodeAnalyzerService();
+        List<Finding> findings = service.analyzeModule(tempDir, "test-mod", tempDir);
+
+        assertThat(findings).anyMatch(f -> f.recipeId().equals("JAVA17-003") && f.category() == Category.JAVA17);
+    }
+
+    @Test
+    void shouldDetectFindingsInSampleLegacyApp() throws Exception {
+        java.nio.file.Path root = java.nio.file.Paths.get("d:/work/sample/refacto/sample-legacy-app");
+        if (root.toFile().exists()) {
+            CodeAnalyzerService service = new CodeAnalyzerService();
+            List<Finding> findings = service.analyzeModule(root, "batch-payment", root.resolve("batch-payment"));
+            System.out.println("Findings in batch-payment: " + findings.stream().map(Finding::recipeId).toList());
+            assertThat(findings).anyMatch(f -> f.recipeId().equals("JAVA17-003"));
+        }
+    }
 }

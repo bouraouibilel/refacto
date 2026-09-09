@@ -156,4 +156,119 @@ class TransformationEngineTest {
         assertThat(diffGen.hasMeaningfulChanges(original, sameCodeDifferentSpacing)).isFalse();
         assertThat(diffGen.hasMeaningfulChanges(original, realChange)).isTrue();
     }
+
+    @Test
+    void shouldTransformBatch5Builders() {
+        String code = """
+                package com.sample.batch;
+                import org.springframework.batch.core.Job;
+                import org.springframework.batch.core.Step;
+                import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+                import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+                public class PaymentJobConfig {
+                    private final JobBuilderFactory jobBuilderFactory;
+                    private final StepBuilderFactory stepBuilderFactory;
+                    public PaymentJobConfig(JobBuilderFactory jobBuilderFactory, StepBuilderFactory stepBuilderFactory) {
+                        this.jobBuilderFactory = jobBuilderFactory;
+                        this.stepBuilderFactory = stepBuilderFactory;
+                    }
+                    public Job paymentJob() {
+                        return jobBuilderFactory.get("paymentJob").build();
+                    }
+                    public Step paymentStep() {
+                        return stepBuilderFactory.get("paymentStep").build();
+                    }
+                }
+                """;
+
+        Finding finding = Finding.of(
+                "F-4", "batch-payment", "APP-BATCH-001", "1.0",
+                Category.FRAMEWORK, Severity.HIGH, 98, AutomationLevel.AUTO_SAFE,
+                "PaymentJobConfig.java", 6, 12, "JobBuilderFactory",
+                "Migration Batch 5", "Batch 5 builders",
+                "Fix", "Use new JobBuilder", 2.0, "Medium", code
+        );
+
+        AstTransformerService transformer = new AstTransformerService();
+        var transformed = transformer.transformCode(code, finding);
+
+        assertThat(transformed).isPresent();
+        String result = transformed.get();
+        assertThat(result).contains("new JobBuilder(\"paymentJob\", jobRepository)");
+        assertThat(result).contains("new StepBuilder(\"paymentStep\", jobRepository)");
+        assertThat(result).contains("JobRepository jobRepository");
+        assertThat(result).doesNotContain("JobBuilderFactory");
+        assertThat(result).doesNotContain("StepBuilderFactory");
+    }
+
+    @Test
+    void shouldTransformFileToPath() {
+        String code = """
+                package com.sample;
+                import java.io.File;
+                public class AuditService {
+                    public void checkFile() {
+                        File auditFile = new File("/tmp/payment.log");
+                        if (auditFile.exists()) {
+                            System.out.println("exists");
+                        }
+                    }
+                }
+                """;
+
+        Finding finding = Finding.of(
+                "F-5", "batch-payment", "JAVA17-002", "1.0",
+                Category.JAVA17, Severity.LOW, 95, AutomationLevel.AUTO_SAFE,
+                "AuditService.java", 5, 8, "new File",
+                "Migration File vers Path", "NIO modernize",
+                "Fix", "Use Path.of", 0.5, "Low", code
+        );
+
+        AstTransformerService transformer = new AstTransformerService();
+        var transformed = transformer.transformCode(code, finding);
+
+        assertThat(transformed).isPresent();
+        String result = transformed.get();
+        assertThat(result).contains("Path auditFile = Path.of(\"/tmp/payment.log\")");
+        assertThat(result).contains("Files.exists(auditFile)");
+        assertThat(result).contains("import java.nio.file.Path;");
+        assertThat(result).contains("import java.nio.file.Files;");
+    }
+
+    @Test
+    void shouldTransformSwitchExpressions() {
+        String code = """
+                package com.sample;
+                public class StatusHelper {
+                    public int getCode(String status) {
+                        switch (status) {
+                            case "ACTIVE":
+                                return 1;
+                            case "PENDING":
+                                return 2;
+                            default:
+                                return 0;
+                        }
+                    }
+                }
+                """;
+
+        Finding finding = Finding.of(
+                "F-6", "batch-payment", "JAVA17-004", "1.0",
+                Category.JAVA17, Severity.LOW, 90, AutomationLevel.AUTO_SAFE,
+                "StatusHelper.java", 4, 10, "switch",
+                "Switch expressions", "Clean code",
+                "Fix", "Use ->", 0.5, "Low", code
+        );
+
+        AstTransformerService transformer = new AstTransformerService();
+        var transformed = transformer.transformCode(code, finding);
+
+        assertThat(transformed).isPresent();
+        String result = transformed.get();
+        assertThat(result).contains("case \"ACTIVE\" ->");
+        assertThat(result).contains("case \"PENDING\" ->");
+        assertThat(result).contains("default ->");
+        assertThat(result).doesNotContain("case \"ACTIVE\":");
+    }
 }

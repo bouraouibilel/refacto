@@ -53,9 +53,18 @@
                     <i data-lucide="play" class="w-4 h-4"></i>
                     <span>Charger Démo</span>
                 </button>
+                <button onclick="exportCurrentAnalysis()" title="Exporter l'analyse complète (JSON rechargeable)" class="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded-lg shadow-sm transition">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>Exporter JSON</span>
+                </button>
+                <label for="headerImportFileInput" title="Recharger une analyse exportée sans avoir les sources sur cette machine" class="inline-flex items-center space-x-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg shadow-sm transition cursor-pointer">
+                    <i data-lucide="upload" class="w-4 h-4"></i>
+                    <span>Recharger Analyse</span>
+                    <input type="file" id="headerImportFileInput" accept=".json" class="hidden" onchange="handleImportAnalysisFile(event)">
+                </label>
                 <button onclick="openImportModal()" class="inline-flex items-center space-x-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
                     <i data-lucide="folder-plus" class="w-4 h-4"></i>
-                    <span>Importer un Projet</span>
+                    <span>Scanner Projet</span>
                 </button>
             </div>
         </div>
@@ -207,6 +216,10 @@
                     <button onclick="downloadReport('json')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg border border-slate-200 transition flex items-center space-x-1.5">
                         <i data-lucide="code" class="w-3.5 h-3.5"></i>
                         <span>JSON</span>
+                    </button>
+                    <button onclick="exportCurrentAnalysis()" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 transition flex items-center space-x-1.5" title="Exporter l'analyse complète rechargeable">
+                        <i data-lucide="package-check" class="w-3.5 h-3.5"></i>
+                        <span>Snapshot Rechargeable (.json)</span>
                     </button>
                 </div>
             </div>
@@ -479,6 +492,23 @@
                         <i data-lucide="info" class="w-3.5 h-3.5 text-blue-600 shrink-0"></i>
                         <span>Bascule automatique : Jakarta EE 10, Spring Batch 5.1, Hibernate 6.5.</span>
                     </div>
+                </div>
+
+                <!-- Option snapshot upload -->
+                <div class="border-t border-slate-200 pt-3">
+                    <label for="modalImportFileInput" class="flex items-center justify-between p-3 border border-indigo-200 hover:border-indigo-400 bg-indigo-50/50 hover:bg-indigo-50 rounded-xl cursor-pointer transition">
+                        <div class="flex items-center space-x-2.5">
+                            <div class="p-2 bg-indigo-100 text-indigo-700 rounded-lg">
+                                <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-bold text-indigo-950">Ou charger un snapshot exporté (.json)</div>
+                                <div class="text-[11px] text-indigo-600">Recharger l'analyse sans les sources sur cette machine</div>
+                            </div>
+                        </div>
+                        <span class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-[11px] font-semibold">Parcourir</span>
+                        <input type="file" id="modalImportFileInput" accept=".json" class="hidden" onchange="handleImportAnalysisFile(event); closeImportModal();">
+                    </label>
                 </div>
             </div>
 
@@ -1459,6 +1489,39 @@
                 return;
             }
             window.open(`/api/analyses/${currentAnalysis.analysisId}/report/${format}`, '_blank');
+        }
+
+        function exportCurrentAnalysis() {
+            if (!currentAnalysis) {
+                alert("Veuillez d'abord lancer ou charger une analyse.");
+                return;
+            }
+            window.open(`/api/analyses/${currentAnalysis.analysisId}/export`, '_blank');
+        }
+
+        async function handleImportAnalysisFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('/api/analyses/import/file', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!res.ok) {
+                    throw new Error("Erreur serveur (" + res.status + ") : " + res.statusText);
+                }
+                const data = await res.json();
+                loadAnalysis(data);
+                alert(`✅ Analyse rechargée avec succès !\n\nProjet : ${data.project ? data.project.name : 'Inconnu'}\nModules : ${data.modules.length}\nFindings : ${data.findings.length}\nScore de Risque : ${data.riskAssessment ? data.riskAssessment.score : 'N/A'}/100`);
+            } catch (err) {
+                alert("❌ Impossible de recharger l'analyse : " + err.message);
+            } finally {
+                event.target.value = '';
+            }
         }
 
         async function checkAndLoadLatestAnalysis() {

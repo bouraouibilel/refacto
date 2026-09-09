@@ -4,8 +4,12 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.stmt.*;
@@ -14,6 +18,7 @@ import com.refacto.migration.core.model.Finding;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +28,13 @@ import java.util.Optional;
 public class AstTransformerService {
 
     private static final Logger log = LoggerFactory.getLogger(AstTransformerService.class);
+
+    static {
+        try {
+            StaticJavaParser.getParserConfiguration()
+                    .setLanguageLevel(com.github.javaparser.ParserConfiguration.LanguageLevel.JAVA_17);
+        } catch (Exception ignored) {}
+    }
 
     public Optional<String> transformCode(String originalContent, Finding finding) {
         if (originalContent == null || originalContent.isBlank()) {
@@ -48,12 +60,21 @@ public class AstTransformerService {
             } else if (recipeId.startsWith("FRAMEWORK-003") || recipeId.startsWith("FRAMEWORK-004")) {
                 // JUnit 4 -> JUnit 5 annotations
                 modified = transformJUnit4To5(cu);
+            } else if (recipeId.startsWith("APP-BATCH-001") || recipeId.startsWith("APP-BATCH-002") || recipeId.startsWith("FRAMEWORK-002")) {
+                // Spring Batch 5 JobBuilder & StepBuilder modernization
+                modified = transformBatch5Builders(cu);
             } else if (recipeId.startsWith("JAVA17-001")) {
                 // Try-with-resources conversion
                 modified = transformTryWithResources(cu);
+            } else if (recipeId.startsWith("JAVA17-002")) {
+                // java.io.File -> java.nio.file.Path / Files
+                modified = transformFileToPath(cu);
             } else if (recipeId.startsWith("JAVA17-003")) {
                 // Nested loops to Stream API
                 modified = transformNestedLoopsToStream(cu);
+            } else if (recipeId.startsWith("JAVA17-004")) {
+                // Switch expressions Java 17
+                modified = transformSwitchExpressions(cu);
             } else if (recipeId.startsWith("APP-DB-005")) {
                 // Suggest explicit projection comment/marker
                 modified = annotateWithProjectionRecommendation(cu);
@@ -334,5 +355,215 @@ public class AstTransformerService {
             return true;
         }
         return false;
+    }
+
+    private boolean transformBatch5Builders(CompilationUnit cu) {
+        boolean modified = false;
+
+        // 1. Transform jobBuilderFactory.get("name") -> new JobBuilder("name", jobRepository)
+        for (MethodCallExpr call : cu.findAll(MethodCallExpr.class)) {
+            if (call.getNameAsString().equals("get") && call.getScope().isPresent()) {
+                String scope = call.getScope().get().toString().toLowerCase();
+                if (scope.contains("jobbuilder") && !call.getArguments().isEmpty()) {
+                    Expression arg = call.getArguments().get(0);
+                    ObjectCreationExpr newJobBuilder = new ObjectCreationExpr(
+                            null,
+                            StaticJavaParser.parseClassOrInterfaceType("JobBuilder"),
+                            new NodeList<>(arg.clone(), new NameExpr("jobRepository"))
+                    );
+                    call.replace(newJobBuilder);
+                    modified = true;
+                } else if (scope.contains("stepbuilder") && !call.getArguments().isEmpty()) {
+                    Expression arg = call.getArguments().get(0);
+                    ObjectCreationExpr newStepBuilder = new ObjectCreationExpr(
+                            null,
+                            StaticJavaParser.parseClassOrInterfaceType("StepBuilder"),
+                            new NodeList<>(arg.clone(), new NameExpr("jobRepository"))
+                    );
+                    call.replace(newStepBuilder);
+                    modified = true;
+                }
+            }
+        }
+
+        // 2. Transform Fields: JobBuilderFactory / StepBuilderFactory -> JobRepository
+        for (ClassOrInterfaceDeclaration cid : cu.findAll(ClassOrInterfaceDeclaration.class)) {
+            boolean hasJobRepoField = cid.getFields().stream()
+                    .anyMatch(f -> f.getElementType().asString().equals("JobRepository"));
+
+            List<FieldDeclaration> toRemove = new ArrayList<>();
+            for (FieldDeclaration field : cid.getFields()) {
+                String typeName = field.getElementType().asString();
+                if (typeName.contains("JobBuilderFactory")) {
+                    if (!hasJobRepoField) {
+                        field.getVariable(0).setType("JobRepository");
+                        field.getVariable(0).setName("jobRepository");
+                        hasJobRepoField = true;
+                        modified = true;
+                    } else {
+                        toRemove.add(field);
+                    }
+                } else if (typeName.contains("StepBuilderFactory")) {
+                    if (!hasJobRepoField) {
+                        field.getVariable(0).setType("JobRepository");
+                        field.getVariable(0).setName("jobRepository");
+                        hasJobRepoField = true;
+                        modified = true;
+                    } else {
+                        toRemove.add(field);
+                    }
+                }
+            }
+            toRemove.forEach(FieldDeclaration::remove);
+
+            // 3. Transform Constructors
+            for (ConstructorDeclaration constructor : cid.getConstructors()) {
+                boolean hasJobRepoParam = constructor.getParameters().stream()
+                        .anyMatch(p -> p.getType().asString().equals("JobRepository"));
+
+                List<Parameter> paramsToRemove = new ArrayList<>();
+                for (Parameter param : constructor.getParameters()) {
+                    String pType = param.getType().asString();
+                    if (pType.contains("JobBuilderFactory")) {
+                        if (!hasJobRepoParam) {
+                            param.setType("JobRepository");
+                            param.setName("jobRepository");
+                            hasJobRepoParam = true;
+                            modified = true;
+                        } else {
+                            paramsToRemove.add(param);
+                        }
+                    } else if (pType.contains("StepBuilderFactory")) {
+                        if (!hasJobRepoParam) {
+                            param.setType("JobRepository");
+                            param.setName("jobRepository");
+                            hasJobRepoParam = true;
+                            modified = true;
+                        } else {
+                            paramsToRemove.add(param);
+                        }
+                    }
+                }
+                paramsToRemove.forEach(Parameter::remove);
+
+                // Update constructor body assignments
+                constructor.getBody().findAll(AssignExpr.class).forEach(assign -> {
+                    String target = assign.getTarget().toString();
+                    if (target.contains("stepBuilderFactory")) {
+                        assign.getParentNode().ifPresent(p -> {
+                            if (p instanceof Statement s) s.remove();
+                        });
+                    } else if (target.contains("jobBuilderFactory")) {
+                        assign.setTarget(new NameExpr("this.jobRepository"));
+                        assign.setValue(new NameExpr("jobRepository"));
+                    }
+                });
+            }
+        }
+
+        // 4. Update imports
+        if (modified) {
+            cu.getImports().removeIf(i -> i.getNameAsString().contains("JobBuilderFactory") ||
+                                          i.getNameAsString().contains("StepBuilderFactory"));
+            cu.addImport("org.springframework.batch.core.job.builder.JobBuilder");
+            cu.addImport("org.springframework.batch.core.step.builder.StepBuilder");
+            cu.addImport("org.springframework.batch.core.repository.JobRepository");
+        }
+
+        return modified;
+    }
+
+    private boolean transformFileToPath(CompilationUnit cu) {
+        boolean modified = false;
+
+        // 1. Replace new File(...) with Path.of(...)
+        for (ObjectCreationExpr creation : cu.findAll(ObjectCreationExpr.class)) {
+            if (creation.getType().asString().equals("File") && !creation.getArguments().isEmpty()) {
+                MethodCallExpr pathOf = new MethodCallExpr(
+                        new NameExpr("Path"),
+                        "of",
+                        creation.getArguments()
+                );
+                creation.replace(pathOf);
+                modified = true;
+            }
+        }
+
+        // 2. Replace variable declarations: File var = Path.of(...) -> Path var = Path.of(...)
+        for (VariableDeclarationExpr varDecl : cu.findAll(VariableDeclarationExpr.class)) {
+            for (VariableDeclarator vd : varDecl.getVariables()) {
+                if (vd.getType().asString().equals("File") &&
+                        vd.getInitializer().map(init -> init.toString().contains("Path.of")).orElse(false)) {
+                    vd.setType("Path");
+                    modified = true;
+                }
+            }
+        }
+
+        // 3. Replace file.exists() -> Files.exists(file)
+        for (MethodCallExpr call : cu.findAll(MethodCallExpr.class)) {
+            if (call.getNameAsString().equals("exists") && call.getArguments().isEmpty() && call.getScope().isPresent()) {
+                Expression scope = call.getScope().get();
+                MethodCallExpr filesExists = new MethodCallExpr(
+                        new NameExpr("Files"),
+                        "exists",
+                        new NodeList<>(scope.clone())
+                );
+                call.replace(filesExists);
+                modified = true;
+            }
+        }
+
+        // 4. Update imports
+        if (modified) {
+            cu.addImport("java.nio.file.Path");
+            cu.addImport("java.nio.file.Files");
+        }
+
+        return modified;
+    }
+
+    private boolean transformSwitchExpressions(CompilationUnit cu) {
+        boolean modified = false;
+
+        for (SwitchStmt switchStmt : cu.findAll(SwitchStmt.class)) {
+            boolean allReturn = !switchStmt.getEntries().isEmpty() && switchStmt.getEntries().stream()
+                    .allMatch(e -> e.getStatements().size() == 1 && e.getStatements().get(0).isReturnStmt());
+
+            StringBuilder sb = new StringBuilder();
+            if (allReturn) {
+                sb.append("return switch (").append(switchStmt.getSelector().toString()).append(") {\n");
+                for (SwitchEntry entry : switchStmt.getEntries()) {
+                    String labels = entry.getLabels().isEmpty() ? "default" :
+                            "case " + String.join(", ", entry.getLabels().stream().map(Expression::toString).toList());
+                    Expression returnVal = entry.getStatements().get(0).asReturnStmt().getExpression().orElse(null);
+                    sb.append("    ").append(labels).append(" -> ").append(returnVal != null ? returnVal.toString() : "").append(";\n");
+                }
+                sb.append("};");
+
+                Statement newStmt = StaticJavaParser.parseStatement(sb.toString());
+                switchStmt.replace(newStmt);
+                modified = true;
+            } else {
+                sb.append("switch (").append(switchStmt.getSelector().toString()).append(") {\n");
+                for (SwitchEntry entry : switchStmt.getEntries()) {
+                    String labels = entry.getLabels().isEmpty() ? "default" :
+                            "case " + String.join(", ", entry.getLabels().stream().map(Expression::toString).toList());
+                    List<Statement> stmts = entry.getStatements().stream()
+                            .filter(s -> !s.isBreakStmt())
+                            .toList();
+                    String body = stmts.size() == 1 ? stmts.get(0).toString().trim() :
+                            "{ " + String.join(" ", stmts.stream().map(Statement::toString).toList()) + " }";
+                    sb.append("    ").append(labels).append(" -> ").append(body).append("\n");
+                }
+                sb.append("}");
+
+                Statement newStmt = StaticJavaParser.parseStatement(sb.toString());
+                switchStmt.replace(newStmt);
+                modified = true;
+            }
+        }
+
+        return modified;
     }
 }
