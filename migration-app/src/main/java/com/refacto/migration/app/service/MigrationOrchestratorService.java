@@ -52,11 +52,13 @@ public class MigrationOrchestratorService {
     private final PerformanceEngineService performanceService = new PerformanceEngineService();
     private final ReportingEngineService reportingService = new ReportingEngineService();
     private final AiAssistantService aiAssistant = new AiAssistantService();
+    private final com.refacto.migration.code.DddRefactoringService dddRefactoringService = new com.refacto.migration.code.DddRefactoringService();
 
     // In-memory state store for analyses and campaigns
     private final Map<String, Project> projects = new ConcurrentHashMap<>();
     private final Map<String, AnalysisContext> analyses = new ConcurrentHashMap<>();
 
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public record AnalysisContext(
             String analysisId,
             Project project,
@@ -71,7 +73,8 @@ public class MigrationOrchestratorService {
             List<MigrationWave> waves,
             DryRunResult dryRunResult,
             ValidationResult validationResult,
-            List<PerformanceComparison> performanceComparisons
+            List<PerformanceComparison> performanceComparisons,
+            DddRefactoringPlan dddPlan
     ) {}
 
     public Project registerProject(String name, String localPathOrUri, String branch) {
@@ -148,6 +151,11 @@ public class MigrationOrchestratorService {
         int totalFiles = modules.stream().mapToInt(ModuleDescriptor::sourceCount).sum();
         DryRunResult dryRunResult = dryRunService.executeDryRun(rootPath, findings, totalFiles);
 
+        // 9. DDD Architecture & Modular Composition Plan
+        DddRefactoringPlan dddPlan = dddRefactoringService.buildRefactoringPlan(
+                rootPath, modules, batches, archResult.couplings()
+        );
+
         String analysisId = UUID.randomUUID().toString().substring(0, 8);
         AnalysisContext context = new AnalysisContext(
                 analysisId,
@@ -163,7 +171,8 @@ public class MigrationOrchestratorService {
                 waves,
                 dryRunResult,
                 null,
-                new ArrayList<>()
+                new ArrayList<>(),
+                dddPlan
         );
 
         analyses.put(analysisId, context);
@@ -260,7 +269,8 @@ public class MigrationOrchestratorService {
         AnalysisContext updated = new AnalysisContext(
                 ctx.analysisId(), ctx.project(), ctx.snapshot(), ctx.modules(), ctx.batches(),
                 ctx.dependencies(), ctx.targetProfile(), ctx.findings(), ctx.riskAssessment(),
-                ctx.architectureCouplings(), ctx.waves(), ctx.dryRunResult(), valResult, ctx.performanceComparisons()
+                ctx.architectureCouplings(), ctx.waves(), ctx.dryRunResult(), valResult, ctx.performanceComparisons(),
+                ctx.dddPlan()
         );
         analyses.put(analysisId, updated);
         return valResult;
@@ -323,5 +333,9 @@ public class MigrationOrchestratorService {
 
     public ReportingEngineService getReportingService() {
         return reportingService;
+    }
+
+    public com.refacto.migration.code.DddRefactoringService getDddRefactoringService() {
+        return dddRefactoringService;
     }
 }

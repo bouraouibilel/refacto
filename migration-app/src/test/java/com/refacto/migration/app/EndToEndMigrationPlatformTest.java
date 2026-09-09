@@ -170,5 +170,25 @@ class EndToEndMigrationPlatformTest {
 
         MigrationOrchestratorService.AnalysisContext registered = orchestrator.importAnalysis(imported);
         assertThat(orchestrator.getAnalysis(registered.analysisId())).isPresent();
+
+        // 13. Verify DDD Architecture & Refactoring Plan
+        DddRefactoringPlan dddPlan = context.dddPlan();
+        assertThat(dddPlan).isNotNull();
+        assertThat(dddPlan.boundedContexts()).isNotEmpty();
+        assertThat(dddPlan.boundedContexts()).anyMatch(bc -> bc.id().equals("payment-context"));
+        assertThat(dddPlan.classifications()).anyMatch(c -> c.className().equals("PaymentProcessor") && c.layer() == DddLayer.APPLICATION);
+        assertThat(dddPlan.targetModules()).anyMatch(m -> m.moduleArtifactId().equals("payment-domain"));
+        assertThat(dddPlan.decoupledEntitiesCount()).isGreaterThan(0);
+
+        // 14. Verify AI Assistant Explanations and Refactoring Suggestions
+        Finding appDb001 = findings.stream().filter(f -> f.recipeId().equals("APP-DB-001")).findFirst().orElseThrow();
+        String aiExplanation = orchestrator.getAiAssistant().explainFinding(appDb001);
+        assertThat(aiExplanation).contains("APP-DB-001").contains("DAO");
+
+        String aiRefactoredCode = orchestrator.getAiAssistant().suggestRefactoring(appDb001, null);
+        assertThat(aiRefactoredCode).contains("PaymentDAO");
+
+        String aiChat = orchestrator.getAiAssistant().askAssistant("Comment organiser mes modules en DDD ?", null, List.of());
+        assertThat(aiChat).contains("Bounded Contexts");
     }
 }

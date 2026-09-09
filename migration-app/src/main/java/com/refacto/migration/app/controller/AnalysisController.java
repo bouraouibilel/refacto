@@ -96,6 +96,13 @@ public class AnalysisController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/{id}/ddd-plan")
+    public ResponseEntity<com.refacto.migration.core.model.DddRefactoringPlan> getDddPlan(@PathVariable String id) {
+        return orchestrator.getAnalysis(id)
+                .map(ctx -> ResponseEntity.ok(ctx.dddPlan()))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/{id}/diffs/{diffId}/approve")
     public ResponseEntity<DiffEntry> approveDiff(@PathVariable String id, @PathVariable String diffId) {
         try {
