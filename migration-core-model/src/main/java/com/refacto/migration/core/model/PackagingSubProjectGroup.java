@@ -13,26 +13,47 @@ public record PackagingSubProjectGroup(
         String originalPackagingDir,
         String targetSubProjectDir,
         List<ModuleReorganizationItem> childModules,
+        List<CommonModuleSlice> commonModuleSlices,
         boolean included,
         String status
 ) {
+    public PackagingSubProjectGroup {
+        if (childModules == null) childModules = List.of();
+        if (commonModuleSlices == null) commonModuleSlices = List.of();
+    }
+
+    public PackagingSubProjectGroup(
+            String packagingArtifactId,
+            String originalPackagingDir,
+            String targetSubProjectDir,
+            List<ModuleReorganizationItem> childModules,
+            boolean included,
+            String status
+    ) {
+        this(packagingArtifactId, originalPackagingDir, targetSubProjectDir, childModules, List.of(), included, status);
+    }
+
     public PackagingSubProjectGroup withPackagingArtifactId(String newArtifactId) {
-        return new PackagingSubProjectGroup(newArtifactId, originalPackagingDir, targetSubProjectDir, childModules, included, status);
+        return new PackagingSubProjectGroup(newArtifactId, originalPackagingDir, targetSubProjectDir, childModules, commonModuleSlices, included, status);
     }
 
     public PackagingSubProjectGroup withTargetSubProjectDir(String newTargetDir) {
-        return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, newTargetDir, childModules, included, status);
+        return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, newTargetDir, childModules, commonModuleSlices, included, status);
     }
 
     public PackagingSubProjectGroup withChildModules(List<ModuleReorganizationItem> newChildModules) {
-        return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, targetSubProjectDir, newChildModules, included, status);
+        return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, targetSubProjectDir, newChildModules, commonModuleSlices, included, status);
+    }
+
+    public PackagingSubProjectGroup withCommonModuleSlices(List<CommonModuleSlice> newSlices) {
+        return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, targetSubProjectDir, childModules, newSlices, included, status);
     }
 
     public PackagingSubProjectGroup withIncluded(boolean newIncluded) {
-        return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, targetSubProjectDir, childModules, newIncluded, status);
+        return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, targetSubProjectDir, childModules, commonModuleSlices, newIncluded, status);
     }
 
     public PackagingSubProjectGroup withStatus(String newStatus) {
-        return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, targetSubProjectDir, childModules, included, newStatus);
+        return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, targetSubProjectDir, childModules, commonModuleSlices, included, newStatus);
     }
 }

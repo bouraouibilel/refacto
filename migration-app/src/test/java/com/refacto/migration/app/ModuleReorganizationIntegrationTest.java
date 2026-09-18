@@ -282,4 +282,122 @@ class ModuleReorganizationIntegrationTest {
         assertThat(rootPom).doesNotContain("<module>billing-service</module>");
         assertThat(rootPom).doesNotContain("<module>core-utils</module>");
     }
+
+    @Test
+    void shouldVerifyRecipeAndCommonModuleSlicingLifecycle(@TempDir Path tempDir) throws Exception {
+        // 1. Vérifier que la Recipe APP-ARCH-004 est bien déclarée dans le catalogue
+        mockMvc.perform(get("/api/recipes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == 'APP-ARCH-004')]").exists())
+                .andExpect(jsonPath("$[?(@.id == 'APP-ARCH-004')].automationLevel").value("REVIEW_REQUIRED"))
+                .andExpect(jsonPath("$[?(@.id == 'APP-ARCH-004')].recipeClassName").value("com.app.rewrite.SpecializeCommonModules"));
+
+        // 2. Setup projet avec module commun partagé et dead-code
+        Files.writeString(tempDir.resolve("pom.xml"), """
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>com.sample.slicing</groupId>
+                    <artifactId>slicing-root</artifactId>
+                    <version>1.0.0</version>
+                    <packaging>pom</packaging>
+                    <modules>
+                        <module>legacy-common</module>
+                        <module>batch-billing</module>
+                        <module>packaging-billing</module>
+                    </modules>
+                </project>
+                """);
+
+        // legacy-common avec 2 classes : SharedClientDAO (utilisé) et LegacyMathUtils (non utilisé)
+        Path commonDir = tempDir.resolve("legacy-common");
+        Path commonSrc = commonDir.resolve("src/main/java/com/sample/common");
+        Files.createDirectories(commonSrc);
+        Files.writeString(commonDir.resolve("pom.xml"), """
+                <project>
+                    <modelVersion>4.0.0</modelVersion>
+                    <parent>
+                        <groupId>com.sample.slicing</groupId>
+                        <artifactId>slicing-root</artifactId>
+                        <version>1.0.0</version>
+                    </parent>
+                    <artifactId>legacy-common</artifactId>
+                </project>
+                """);
+        Files.writeString(commonSrc.resolve("SharedClientDAO.java"), """
+                package com.sample.common;
+                public class SharedClientDAO {}
+                """);
+        Files.writeString(commonSrc.resolve("LegacyMathUtils.java"), """
+                package com.sample.common;
+                public class LegacyMathUtils {}
+                """);
+
+        // batch-billing utilisant SharedClientDAO
+        Path batchDir = tempDir.resolve("batch-billing");
+        Path batchSrc = batchDir.resolve("src/main/java/com/sample/billing");
+        Files.createDirectories(batchSrc);
+        Files.writeString(batchDir.resolve("pom.xml"), """
+                <project><modelVersion>4.0.0</modelVersion><artifactId>batch-billing</artifactId></project>
+                """);
+        Files.writeString(batchSrc.resolve("BillingJob.java"), """
+                package com.sample.billing;
+                import com.sample.common.SharedClientDAO;
+                public class BillingJob {
+                    private SharedClientDAO dao;
+                }
+                """);
+
+        // packaging-billing
+        Path pkgDir = tempDir.resolve("packaging-billing");
+        Files.createDirectories(pkgDir);
+        Files.writeString(pkgDir.resolve("pom.xml"), """
+                <project>
+                    <modelVersion>4.0.0</modelVersion>
+                    <artifactId>packaging-billing</artifactId>
+                    <dependencies>
+                        <dependency>
+                            <groupId>com.sample.slicing</groupId>
+                            <artifactId>batch-billing</artifactId>
+                        </dependency>
+                    </dependencies>
+                </project>
+                """);
+
+        // Analyse
+        Project project = orchestrator.registerProject("Slicing App", tempDir.toString(), "main");
+        MigrationOrchestratorService.AnalysisContext context = orchestrator.runFullAnalysis(project.id(), null);
+        String analysisId = context.analysisId();
+
+        // GET module-reorganization
+        String getRes = mockMvc.perform(get("/api/analyses/" + analysisId + "/module-reorganization"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].commonModuleSlices").isArray())
+                .andExpect(jsonPath("$.groups[0].commonModuleSlices[0].originalModuleName").value("legacy-common"))
+                .andReturn().getResponse().getContentAsString();
+
+        ModuleReorganizationPlan plan = objectMapper.readValue(getRes, ModuleReorganizationPlan.class);
+        var slice = plan.groups().get(0).commonModuleSlices().get(0);
+        assertThat(slice.retainedClasses()).anyMatch(c -> c.contains("SharedClientDAO.java"));
+        assertThat(slice.prunedClasses()).anyMatch(c -> c.contains("LegacyMathUtils.java"));
+
+        // POST apply
+        mockMvc.perform(post("/api/analyses/" + analysisId + "/module-reorganization/apply")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(plan)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.applied").value(true));
+
+        // Vérifications physiques
+        Path targetSubDir = tempDir.resolve("billing");
+        assertThat(targetSubDir).exists().isDirectory();
+
+        String subPomContent = Files.readString(targetSubDir.resolve("pom.xml"));
+        assertThat(subPomContent).contains("<module>batch-billing</module>");
+        assertThat(subPomContent).contains("<module>legacy-common</module>");
+
+        Path targetCommon = targetSubDir.resolve("legacy-common");
+        assertThat(targetCommon).exists().isDirectory();
+        assertThat(targetCommon.resolve("src/main/java/com/sample/common/SharedClientDAO.java")).exists();
+        assertThat(targetCommon.resolve("src/main/java/com/sample/common/LegacyMathUtils.java")).doesNotExist();
+    }
 }

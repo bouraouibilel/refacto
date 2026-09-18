@@ -1,5 +1,6 @@
 package com.refacto.migration.transformation;
 
+import com.refacto.migration.core.model.CommonModuleSlice;
 import com.refacto.migration.core.model.ModuleDescriptor;
 import com.refacto.migration.core.model.ModuleReorganizationItem;
 import com.refacto.migration.core.model.ModuleReorganizationPlan;
@@ -31,6 +32,7 @@ public class ModuleReorganizationService {
     private static final Logger log = LoggerFactory.getLogger(ModuleReorganizationService.class);
 
     private final DiffGeneratorService diffGenerator = new DiffGeneratorService();
+    private final CommonModuleSpecializerService specializer = new CommonModuleSpecializerService();
 
     /**
      * Analyse le projet pour détecter les packagings et leurs modules enfants associés.
@@ -61,6 +63,18 @@ public class ModuleReorganizationService {
             }
         }
 
+        // 1bis. Détecter les modules communs transverses et pré-analyser leurs classes
+        List<String> commonDirs = new ArrayList<>();
+        for (String modDir : rootDeclaredModules) {
+            if (!packagingDirs.contains(modDir) && specializer.isCommonModule(rootPath, modDir)) {
+                commonDirs.add(modDir);
+            }
+        }
+        Map<String, Map<String, CommonModuleSpecializerService.CommonClassInfo>> commonClassesByModule = new HashMap<>();
+        for (String commonDir : commonDirs) {
+            commonClassesByModule.put(commonDir, specializer.scanCommonModuleClasses(rootPath, commonDir));
+        }
+
         // 2. Pour chaque packaging, trouver les dépendances internes vers d'autres modules du projet
         for (String pkgDir : packagingDirs) {
             Path pkgPomPath = rootPath.resolve(pkgDir).resolve("pom.xml");
@@ -84,11 +98,28 @@ public class ModuleReorganizationService {
                 }
             }
 
+            // Calculer les tranches spécialisées des modules communs pour ce groupe
+            List<CommonModuleSlice> slices = new ArrayList<>();
+            for (String commonDir : commonDirs) {
+                var classMap = commonClassesByModule.get(commonDir);
+                CommonModuleSlice slice = specializer.specializeForSubProject(
+                        rootPath,
+                        commonDir,
+                        targetSubDir,
+                        childItems,
+                        classMap
+                );
+                if (!slice.retainedClasses().isEmpty()) {
+                    slices.add(slice);
+                }
+            }
+
             groups.add(new PackagingSubProjectGroup(
                     artifactId,
                     pkgDir,
                     targetSubDir,
                     childItems,
+                    slices,
                     true,
                     "PROPOSED"
             ));
@@ -165,6 +196,36 @@ public class ModuleReorganizationService {
                             child.originalRelativePath(), group.targetSubProjectDir(), childName));
                 }
             }
+
+            // Tranches de modules communs spécialisés (élagage du code mort non référencé)
+            if (group.commonModuleSlices() != null) {
+                for (CommonModuleSlice slice : group.commonModuleSlices()) {
+                    if (!slice.included()) continue;
+
+                    Path origCommonPom = rootPath.resolve(slice.originalModuleName()).resolve("pom.xml");
+                    String origCommonPomContent = Files.exists(origCommonPom) ? readFileContent(origCommonPom) : "";
+                    String parentArtId = (group.packagingArtifactId() != null && !group.packagingArtifactId().isBlank())
+                            ? group.packagingArtifactId()
+                            : group.targetSubProjectDir();
+                    String revisedCommonPomContent = specializer.computeRevisedCommonModulePom(
+                            origCommonPomContent,
+                            group.targetSubProjectDir(),
+                            parentArtId,
+                            slice
+                    );
+
+                    String commonDiffKey = slice.targetRelativePath() + "/pom.xml";
+                    subProjectDiffs.put(commonDiffKey, diffGenerator.generateUnifiedDiff(commonDiffKey, origCommonPomContent, revisedCommonPomContent));
+
+                    // Commande git/copie pour dupliquer la tranche du module commun
+                    gitCommands.add(String.format("git cp \"%s\" \"%s\"", slice.originalModuleName(), slice.targetRelativePath()));
+
+                    // Commandes git pour élaguer (supprimer) les classes non référencées
+                    for (String prunedClass : slice.prunedClasses()) {
+                        gitCommands.add(String.format("git rm \"%s/%s\"", slice.targetRelativePath(), prunedClass));
+                    }
+                }
+            }
         }
 
         return new ModuleReorganizationPlan(
@@ -213,6 +274,20 @@ public class ModuleReorganizationService {
 
                 if (Files.exists(origChildDir) && !origChildDir.equals(targetChildDir)) {
                     safeMoveDirectory(rootPath, origChildDir, targetChildDir, isGit);
+                }
+            }
+
+            // 2bis. Dupliquer et élaguer les tranches de modules communs
+            if (group.commonModuleSlices() != null) {
+                for (CommonModuleSlice slice : group.commonModuleSlices()) {
+                    if (slice.included()) {
+                        String parentArtId = (group.packagingArtifactId() != null && !group.packagingArtifactId().isBlank())
+                                ? group.packagingArtifactId()
+                                : group.targetSubProjectDir();
+                        Path rootPomPath = rootPath.resolve("pom.xml");
+                        String originalRootPom = readFileContent(rootPomPath);
+                        specializer.applySlicePhysically(rootPath, group.targetSubProjectDir(), parentArtId, slice, originalRootPom);
+                    }
                 }
             }
 
@@ -445,10 +520,18 @@ public class ModuleReorganizationService {
     }
 
     private String computeRevisedSubProjectPom(String originalContent, PackagingSubProjectGroup group, String rootPomContent) {
-        List<String> childDirs = group.childModules().stream()
+        List<String> childDirs = new ArrayList<>(group.childModules().stream()
                 .filter(ModuleReorganizationItem::included)
                 .map(item -> Paths.get(item.originalRelativePath()).getFileName().toString())
-                .toList();
+                .toList());
+
+        if (group.commonModuleSlices() != null) {
+            for (CommonModuleSlice slice : group.commonModuleSlices()) {
+                if (slice.included() && !childDirs.contains(slice.targetModuleName())) {
+                    childDirs.add(slice.targetModuleName());
+                }
+            }
+        }
 
         StringBuilder modulesXml = new StringBuilder("    <modules>\n");
         for (String c : childDirs) {

@@ -46,3 +46,19 @@ recipes:
     author: APP Architecture
     rationale: Transformer chaque module de packaging en structure de sous-projet sans préfixe packaging- et y déplacer tous les modules référencés.
 
+  - id: APP-ARCH-004
+    version: "1.0"
+    name: Découpage et spécialisation des modules communs par sous-projet
+    category: ARCHITECTURE
+    severity: HIGH
+    detectorEngine: AST
+    automationLevel: REVIEW_REQUIRED
+    recipeClassName: com.app.rewrite.SpecializeCommonModules
+    dependsOn: [APP-ARCH-003]
+    validation: [compilation, unit-tests]
+    tags: [architecture, commons, specialization, dead-code-elimination, ddd]
+    status: APPROVED
+    author: APP Architecture
+    rationale: Dupliquer les modules communs dans chaque groupe de modules / Bounded Context et éliminer toutes les classes non référencées (Dead Code Elimination).
+
+

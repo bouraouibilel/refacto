@@ -238,4 +238,114 @@ class ModuleReorganizationServiceTest {
         assertThat(finalRootPom).contains("<module>module-b</module>");
         assertThat(finalRootPom).doesNotContain("<module>module-a</module>");
     }
+
+    @Test
+    void shouldSliceAndPruneCommonModulesWhenApplied(@TempDir Path tempDir) throws IOException {
+        // Given root pom.xml
+        String rootPom = """
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                    <modelVersion>4.0.0</modelVersion>
+                    <groupId>com.sample</groupId>
+                    <artifactId>sample-root</artifactId>
+                    <version>1.0.0</version>
+                    <packaging>pom</packaging>
+                    <modules>
+                        <module>legacy-common</module>
+                        <module>batch-payment</module>
+                        <module>packaging-batch-payment</module>
+                    </modules>
+                </project>
+                """;
+        Files.writeString(tempDir.resolve("pom.xml"), rootPom);
+
+        // legacy-common with 2 classes
+        Path commonDir = tempDir.resolve("legacy-common");
+        Path commonSrc = commonDir.resolve("src/main/java/com/sample/common");
+        Files.createDirectories(commonSrc);
+        Files.writeString(commonDir.resolve("pom.xml"), """
+                <project>
+                    <modelVersion>4.0.0</modelVersion>
+                    <parent>
+                        <groupId>com.sample</groupId>
+                        <artifactId>sample-root</artifactId>
+                        <version>1.0.0</version>
+                    </parent>
+                    <artifactId>legacy-common</artifactId>
+                </project>
+                """);
+        Files.writeString(commonSrc.resolve("UsedService.java"), """
+                package com.sample.common;
+                public class UsedService {}
+                """);
+        Files.writeString(commonSrc.resolve("UnusedService.java"), """
+                package com.sample.common;
+                public class UnusedService {}
+                """);
+
+        // batch-payment using UsedService
+        Path batchDir = tempDir.resolve("batch-payment");
+        Path batchSrc = batchDir.resolve("src/main/java/com/sample/batch");
+        Files.createDirectories(batchSrc);
+        Files.writeString(batchDir.resolve("pom.xml"), """
+                <project><modelVersion>4.0.0</modelVersion><artifactId>batch-payment</artifactId></project>
+                """);
+        Files.writeString(batchSrc.resolve("BatchWorker.java"), """
+                package com.sample.batch;
+                import com.sample.common.UsedService;
+                public class BatchWorker {
+                    private UsedService s;
+                }
+                """);
+
+        // packaging-batch-payment
+        Path pkgDir = tempDir.resolve("packaging-batch-payment");
+        Files.createDirectories(pkgDir);
+        Files.writeString(pkgDir.resolve("pom.xml"), """
+                <project>
+                    <modelVersion>4.0.0</modelVersion>
+                    <artifactId>packaging-batch-payment</artifactId>
+                    <dependencies>
+                        <dependency>
+                            <groupId>com.sample</groupId>
+                            <artifactId>batch-payment</artifactId>
+                        </dependency>
+                    </dependencies>
+                </project>
+                """);
+
+        // When analyzing
+        ModuleReorganizationPlan plan = service.analyzeReorganization(tempDir, List.of());
+
+        // Then group has commonModuleSlices
+        assertThat(plan.groups()).hasSize(1);
+        PackagingSubProjectGroup group = plan.groups().get(0);
+        assertThat(group.commonModuleSlices()).hasSize(1);
+        var slice = group.commonModuleSlices().get(0);
+        assertThat(slice.originalModuleName()).isEqualTo("legacy-common");
+        assertThat(slice.targetModuleName()).isEqualTo("legacy-common");
+        assertThat(slice.retainedClasses()).anyMatch(c -> c.contains("UsedService.java"));
+        assertThat(slice.prunedClasses()).anyMatch(c -> c.contains("UnusedService.java"));
+
+        // When applying reorganization
+        ModuleReorganizationPlan applied = service.applyReorganization(tempDir, plan);
+        assertThat(applied.applied()).isTrue();
+
+        // Check target subproject
+        Path targetSubDir = tempDir.resolve("batch-payment-app");
+        assertThat(targetSubDir).exists().isDirectory();
+        Path subPom = targetSubDir.resolve("pom.xml");
+        assertThat(subPom).exists();
+        String subPomContent = Files.readString(subPom);
+        assertThat(subPomContent).contains("<module>batch-payment</module>");
+        assertThat(subPomContent).contains("<module>legacy-common</module>");
+
+        // Check common module inside subproject
+        Path targetCommon = targetSubDir.resolve("legacy-common");
+        assertThat(targetCommon).exists().isDirectory();
+        assertThat(targetCommon.resolve("pom.xml")).exists();
+
+        // Retained class exists, pruned class is deleted
+        assertThat(targetCommon.resolve("src/main/java/com/sample/common/UsedService.java")).exists();
+        assertThat(targetCommon.resolve("src/main/java/com/sample/common/UnusedService.java")).doesNotExist();
+    }
 }
