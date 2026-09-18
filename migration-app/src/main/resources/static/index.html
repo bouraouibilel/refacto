@@ -110,7 +110,11 @@
             </button>
             <button onclick="switchTab('ddd')" id="tab-ddd" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
                 <i data-lucide="layers" class="w-4 h-4"></i>
-                <span>Architecture DDD & Décomposition</span>
+                <span>Architecture DDD</span>
+            </button>
+            <button onclick="switchTab('reorganization')" id="tab-reorganization" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
+                <i data-lucide="folder-tree" class="w-4 h-4"></i>
+                <span>Réorganisation Packaging</span>
             </button>
             <button onclick="switchTab('performance')" id="tab-performance" class="py-3 px-1 text-slate-500 hover:text-slate-800 flex items-center space-x-2">
                 <i data-lucide="gauge" class="w-4 h-4"></i>
@@ -503,6 +507,91 @@
             </div>
         </section>
 
+        <!-- 8.ter RÉORGANISATION MODULAIRE & PACKAGING VIEW -->
+        <section id="view-reorganization" class="space-y-6 hidden">
+            <!-- Header Summary Banner -->
+            <div class="bg-gradient-to-r from-teal-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-6 shadow-md flex flex-col md:flex-row items-center justify-between gap-6">
+                <div>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-500/20 text-teal-300 border border-teal-400/30 mb-2">
+                        Recipe Déclarative &bull; ReorganisePackaging (APP-ARCH-003) &bull; Revue & Validation Requise
+                    </span>
+                    <h2 class="text-2xl font-bold text-white">Réorganisation des Modules & Packagings en Sous-Projets</h2>
+                    <p class="text-slate-300 text-sm mt-1 max-w-3xl">
+                        Transformation de chaque module de packaging en une structure de sous-projet dédiée portant le nom fonctionnel (sans préfixe <code>packaging-</code>), préservation de son <code>artifactId</code> d'origine dans le <code>pom.xml</code>, déplacement de ses modules enfants à l'intérieur et mise à jour de la section <code>&lt;modules&gt;</code> du parent.
+                    </p>
+                </div>
+                <div class="flex flex-col items-end gap-2 shrink-0">
+                    <button onclick="applyReorgPlan()" id="reorgApplyBtn" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center space-x-2">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i>
+                        <span>Appliquer la Réorganisation des Modules</span>
+                    </button>
+                    <span class="text-[11px] text-teal-300/80 italic">Opération non automatique : exécutée uniquement sur votre confirmation.</span>
+                </div>
+            </div>
+
+            <!-- Groups & Modules Mapping (Interactive Card) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">Groupes de Sous-Projets Détectés</h3>
+                        <p class="text-xs text-slate-500">Personnalisez le nom du dossier cible et sélectionnez les modules enfants à intégrer à l'intérieur.</p>
+                    </div>
+                    <button onclick="recalculateReorgPreview()" class="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 flex items-center space-x-1.5 transition">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        <span>Recalculer la Prévisualisation & Diffs</span>
+                    </button>
+                </div>
+
+                <div id="reorgGroupsContainer" class="space-y-4">
+                    <div class="text-xs text-slate-400">Chargement de la proposition de réorganisation...</div>
+                </div>
+
+                <!-- Unassigned / Transverse Modules List -->
+                <div id="reorgUnassignedContainer" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs hidden">
+                    <span class="font-bold text-slate-700">Modules Transverses (Non déplacés, restant à la racine) :</span>
+                    <div id="reorgUnassignedList" class="flex flex-wrap gap-1.5 mt-2"></div>
+                </div>
+            </div>
+
+            <!-- Previews : Diffs and Git Commands -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- Root pom.xml diff -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 flex flex-col">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+                            <i data-lucide="file-diff" class="w-4 h-4 text-blue-600"></i>
+                            <span>Diff du POM Parent Global (<code>pom.xml</code>)</span>
+                        </h4>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-mono">Section &lt;modules&gt;</span>
+                    </div>
+                    <pre id="reorgRootPomDiff" class="flex-1 p-3 bg-slate-950 text-slate-200 rounded-lg text-[11px] font-mono overflow-x-auto whitespace-pre-wrap max-h-72">Aucune modification.</pre>
+                </div>
+
+                <!-- Sub-project pom.xml diffs and Git Commands -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 flex flex-col">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+                            <i data-lucide="terminal" class="w-4 h-4 text-emerald-600"></i>
+                            <span>Commandes Git & Déplacements Physiques</span>
+                        </h4>
+                        <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono">git mv</span>
+                    </div>
+                    <pre id="reorgGitCommands" class="flex-1 p-3 bg-slate-950 text-emerald-400 rounded-lg text-[11px] font-mono overflow-x-auto whitespace-pre-wrap max-h-72">Aucune commande nécessaire.</pre>
+                </div>
+            </div>
+
+            <!-- SubProject POM Diffs Card -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <h4 class="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+                    <i data-lucide="file-text" class="w-4 h-4 text-purple-600"></i>
+                    <span>Diffs des POMs des Sous-Projets Créés (Agrégation des modules internes)</span>
+                </h4>
+                <div id="reorgSubProjectPomDiffs" class="space-y-3">
+                    <div class="text-xs text-slate-400">Aucun sous-projet créé.</div>
+                </div>
+            </div>
+        </section>
+
         <!-- 9. PERFORMANCE & VALIDATION VIEW -->
         <section id="view-performance" class="space-y-6 hidden">
             <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -799,6 +888,9 @@
                 tabBtn.classList.add('tab-active');
                 tabBtn.classList.remove('text-slate-500');
             }
+            if (tabId === 'reorganization' && (!window.currentReorgPlan || !window.currentReorgPlan.groups)) {
+                fetchReorgPlan();
+            }
             lucide.createIcons();
         }
 
@@ -975,6 +1067,7 @@
             renderDiffs(data.dryRunResult);
             renderArchitecture(data.architectureCouplings || []);
             renderDdd(data.dddPlan);
+            renderReorganization(data.moduleReorganizationPlan);
             loadRecipes();
 
             lucide.createIcons();
@@ -1224,9 +1317,17 @@
                             </div>
                             <h4 class="font-bold text-slate-900 text-sm">${escapeHtml(r.name)}</h4>
                             <p class="text-xs text-slate-600">${escapeHtml(r.description)}</p>
-                            <div class="text-[11px] text-slate-500 flex items-center space-x-3 pt-1 border-t border-slate-100">
-                                <span>Auto : <strong class="text-slate-700">${escapeHtml(r.automationLevel)}</strong></span>
-                                <span>Confiance : <strong>${r.confidenceScore}%</strong></span>
+                            <div class="text-[11px] text-slate-500 flex items-center justify-between pt-1 border-t border-slate-100">
+                                <div class="flex items-center space-x-3">
+                                    <span>Auto : <strong class="text-slate-700">${escapeHtml(r.automationLevel)}</strong></span>
+                                    <span>Confiance : <strong>${r.confidenceScore}%</strong></span>
+                                </div>
+                                ${r.id === 'APP-ARCH-003' ? `
+                                    <button onclick="switchTab('reorganization')" class="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold flex items-center space-x-1 shadow-2xs transition">
+                                        <i data-lucide="folder-tree" class="w-3.5 h-3.5"></i>
+                                        <span>Configurer &amp; Analyser</span>
+                                    </button>
+                                ` : ''}
                             </div>
                         </div>
                     `}).join('');
@@ -1847,6 +1948,260 @@
                     </tr>
                 `;
             }).join('');
+        }
+
+        // ==========================================
+        // MODULE & PACKAGING REORGANIZATION
+        // ==========================================
+
+        window.currentReorgPlan = null;
+
+        async function fetchReorgPlan() {
+            if (!currentAnalysis) return;
+            try {
+                const res = await fetch(`/api/analyses/${currentAnalysis.analysisId}/module-reorganization`);
+                if (res.ok) {
+                    const plan = await res.json();
+                    renderReorganization(plan);
+                }
+            } catch (e) {
+                console.warn("Erreur fetchReorgPlan:", e);
+            }
+        }
+
+        function renderReorganization(plan) {
+            window.currentReorgPlan = plan;
+            const container = document.getElementById('reorgGroupsContainer');
+            const unassignedBox = document.getElementById('reorgUnassignedContainer');
+            const unassignedList = document.getElementById('reorgUnassignedList');
+            const rootDiffEl = document.getElementById('reorgRootPomDiff');
+            const gitCmdsEl = document.getElementById('reorgGitCommands');
+            const subDiffsContainer = document.getElementById('reorgSubProjectPomDiffs');
+
+            if (!plan || !plan.groups || plan.groups.length === 0) {
+                if (container) container.innerHTML = '<div class="text-xs text-slate-400 p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">Aucun module de packaging détecté pour la réorganisation.</div>';
+                if (unassignedBox) unassignedBox.classList.add('hidden');
+                if (rootDiffEl) rootDiffEl.innerText = "Aucune modification.";
+                if (gitCmdsEl) gitCmdsEl.innerText = "Aucune commande nécessaire.";
+                if (subDiffsContainer) subDiffsContainer.innerHTML = '<div class="text-xs text-slate-400">Aucun sous-projet créé.</div>';
+                return;
+            }
+
+            // Render groups
+            if (container) {
+                container.innerHTML = plan.groups.map(g => {
+                    const isGroupIncluded = g.included !== false;
+                    return `
+                        <div class="p-4 rounded-xl border ${isGroupIncluded ? 'border-teal-200 bg-teal-50/20' : 'border-slate-200 bg-slate-50/50 opacity-60'} transition space-y-4 shadow-2xs">
+                            <!-- Group Header -->
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b ${isGroupIncluded ? 'border-teal-100' : 'border-slate-200'}">
+                                <div class="flex items-center space-x-2.5">
+                                    <input type="checkbox" id="chkGroup_${escapeHtml(g.originalPackagingDir)}" ${isGroupIncluded ? 'checked' : ''} onchange="onReorgGroupToggled('${escapeHtml(g.originalPackagingDir)}', this.checked)" class="rounded text-teal-600 focus:ring-teal-500 w-4 h-4">
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <span class="font-bold text-slate-900 text-sm font-mono">${escapeHtml(g.originalPackagingDir)}</span>
+                                            <span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-teal-100 text-teal-800">Sous-Projet Cible</span>
+                                        </div>
+                                        <div class="text-[11px] text-slate-500 mt-0.5">
+                                            ArtifactId Maven préservé : <strong class="font-mono text-teal-950">${escapeHtml(g.packagingArtifactId)}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Target Sub-Project Directory Input -->
+                                <div class="flex items-center space-x-2">
+                                    <label class="text-xs font-semibold text-slate-600 whitespace-nowrap">Dossier Cible :</label>
+                                    <input type="text" id="targetDir_${escapeHtml(g.originalPackagingDir)}" value="${escapeHtml(g.targetSubProjectDir)}" onchange="onReorgTargetDirChanged('${escapeHtml(g.originalPackagingDir)}', this.value)" class="px-3 py-1.5 border border-teal-300 rounded-lg text-xs font-mono font-bold bg-white text-teal-950 focus:ring-2 focus:ring-teal-500 shadow-2xs w-48" placeholder="nom-dossier">
+                                </div>
+                            </div>
+
+                            <!-- Child modules table -->
+                            <div>
+                                <div class="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between">
+                                    <span>Modules Référencés &amp; Déplacés à l'Intérieur (${(g.childModules || []).length}) :</span>
+                                    <span class="text-[10px] text-slate-400 font-normal">Cocher/décocher pour inclure ou exclure un module</span>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-slate-200 text-xs bg-white rounded-lg border border-slate-200">
+                                        <thead class="bg-slate-50">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left font-semibold text-slate-600 w-10">Déplacer</th>
+                                                <th class="px-3 py-2 text-left font-semibold text-slate-600">Module (ArtifactId)</th>
+                                                <th class="px-3 py-2 text-left font-semibold text-slate-600">Chemin Actuel</th>
+                                                <th class="px-3 py-2 text-left font-semibold text-slate-600">Nouveau Chemin Cible</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-100">
+                                            ${(g.childModules || []).map(child => {
+                                                const isChildIncluded = child.included !== false;
+                                                return `
+                                                    <tr class="hover:bg-slate-50 transition">
+                                                        <td class="px-3 py-2 text-center">
+                                                            <input type="checkbox" ${isChildIncluded ? 'checked' : ''} onchange="onReorgChildToggled('${escapeHtml(g.originalPackagingDir)}', '${escapeHtml(child.moduleArtifactId)}', this.checked)" class="rounded text-teal-600 focus:ring-teal-500">
+                                                        </td>
+                                                        <td class="px-3 py-2 font-mono font-bold text-slate-800">${escapeHtml(child.moduleArtifactId)}</td>
+                                                        <td class="px-3 py-2 font-mono text-slate-500">${escapeHtml(child.originalRelativePath)}</td>
+                                                        <td class="px-3 py-2 font-mono font-semibold text-teal-900">${escapeHtml(g.targetSubProjectDir)}/${escapeHtml(child.originalRelativePath)}</td>
+                                                    </tr>
+                                                `;
+                                            }).join('') || '<tr><td colspan="4" class="px-3 py-3 text-center text-slate-400">Aucun module enfant référencé.</td></tr>'}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Render unassigned
+            if (unassignedBox && unassignedList) {
+                if (plan.unassignedModules && plan.unassignedModules.length > 0) {
+                    unassignedBox.classList.remove('hidden');
+                    unassignedList.innerHTML = plan.unassignedModules.map(u => `
+                        <span class="px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700 font-mono text-[11px] font-semibold flex items-center space-x-1">
+                            <i data-lucide="shield" class="w-3 h-3 text-slate-400"></i>
+                            <span>${escapeHtml(u)}</span>
+                        </span>
+                    `).join('');
+                } else {
+                    unassignedBox.classList.add('hidden');
+                }
+            }
+
+            // Root POM Diff
+            if (rootDiffEl) {
+                rootDiffEl.innerText = plan.rootPomDiff || "Aucune modification.";
+            }
+
+            // Git Commands
+            if (gitCmdsEl) {
+                gitCmdsEl.innerText = (plan.gitMoveCommands && plan.gitMoveCommands.length > 0)
+                    ? plan.gitMoveCommands.join('\n')
+                    : "Aucune commande nécessaire.";
+            }
+
+            // Sub-Project POM Diffs
+            if (subDiffsContainer) {
+                const entries = Object.entries(plan.subProjectPomDiffs || {});
+                if (entries.length === 0) {
+                    subDiffsContainer.innerHTML = '<div class="text-xs text-slate-400">Aucun sous-projet créé.</div>';
+                } else {
+                    subDiffsContainer.innerHTML = entries.map(([file, diff]) => `
+                        <div class="border border-slate-200 rounded-lg overflow-hidden">
+                            <div class="bg-slate-100 px-3 py-1.5 text-xs font-mono font-bold text-slate-700 flex items-center space-x-1.5">
+                                <i data-lucide="file-code" class="w-3.5 h-3.5 text-purple-600"></i>
+                                <span>${escapeHtml(file)}</span>
+                            </div>
+                            <pre class="p-3 bg-slate-950 text-slate-200 text-[11px] font-mono overflow-x-auto whitespace-pre-wrap max-h-60">${escapeHtml(diff || 'Aucun changement.')}</pre>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Update apply button if applied
+            const applyBtn = document.getElementById('reorgApplyBtn');
+            if (applyBtn) {
+                if (plan.applied) {
+                    applyBtn.className = "px-4 py-2.5 bg-slate-600 text-white font-bold text-xs rounded-xl shadow-none cursor-default flex items-center space-x-2";
+                    applyBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i><span>Réorganisation Appliquée</span>';
+                    applyBtn.disabled = true;
+                } else {
+                    applyBtn.className = "px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center space-x-2";
+                    applyBtn.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4"></i><span>Appliquer la Réorganisation des Modules</span>';
+                    applyBtn.disabled = false;
+                }
+            }
+
+            lucide.createIcons();
+        }
+
+        function onReorgTargetDirChanged(pkgDir, newTargetDir) {
+            if (!window.currentReorgPlan) return;
+            const cleaned = newTargetDir.trim();
+            if (!cleaned) return;
+            window.currentReorgPlan.groups.forEach(g => {
+                if (g.originalPackagingDir === pkgDir) {
+                    g.targetSubProjectDir = cleaned;
+                }
+            });
+            recalculateReorgPreview();
+        }
+
+        function onReorgGroupToggled(pkgDir, checked) {
+            if (!window.currentReorgPlan) return;
+            window.currentReorgPlan.groups.forEach(g => {
+                if (g.originalPackagingDir === pkgDir) {
+                    g.included = checked;
+                }
+            });
+            recalculateReorgPreview();
+        }
+
+        function onReorgChildToggled(pkgDir, childArtifactId, checked) {
+            if (!window.currentReorgPlan) return;
+            window.currentReorgPlan.groups.forEach(g => {
+                if (g.originalPackagingDir === pkgDir) {
+                    (g.childModules || []).forEach(c => {
+                        if (c.moduleArtifactId === childArtifactId) {
+                            c.included = checked;
+                        }
+                    });
+                }
+            });
+            recalculateReorgPreview();
+        }
+
+        async function recalculateReorgPreview() {
+            if (!currentAnalysis || !window.currentReorgPlan) return;
+            try {
+                const res = await fetch(`/api/analyses/${currentAnalysis.analysisId}/module-reorganization/preview`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(window.currentReorgPlan)
+                });
+                if (res.ok) {
+                    const updated = await res.json();
+                    renderReorganization(updated);
+                }
+            } catch (e) {
+                console.warn("Erreur recalcul prévisualisation :", e);
+            }
+        }
+
+        async function applyReorgPlan() {
+            if (!currentAnalysis || !window.currentReorgPlan) {
+                alert("Aucune analyse active ou plan de réorganisation non disponible.");
+                return;
+            }
+            if (window.currentReorgPlan.applied) {
+                alert("La réorganisation a déjà été appliquée.");
+                return;
+            }
+
+            const confirmMsg = "Êtes-vous certain de vouloir appliquer la réorganisation des modules ?\n\n" +
+                "• Les répertoires de packaging et leurs modules enfants seront déplacés dans les sous-projets cibles.\n" +
+                "• Le pom.xml parent racine et les pom.xml des sous-projets seront mis à jour.";
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/analyses/${currentAnalysis.analysisId}/module-reorganization/apply`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(window.currentReorgPlan)
+                });
+                if (!res.ok) {
+                    throw new Error("Erreur HTTP " + res.status);
+                }
+                const applied = await res.json();
+                renderReorganization(applied);
+                alert("✅ " + (applied.summary || "Réorganisation appliquée avec succès sur le disque !"));
+            } catch (e) {
+                alert("❌ Erreur lors de l'application de la réorganisation : " + e.message);
+            }
         }
 
         // ==========================================

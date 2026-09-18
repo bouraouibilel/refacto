@@ -37,9 +37,11 @@ class EndToEndMigrationPlatformTest {
         );
 
         // 3. Verify Discovery (Modules & Spring Batch)
-        assertThat(context.modules()).hasSize(4); // root + 3 submodules
+        assertThat(context.modules()).hasSize(5); // root + 4 submodules (payment-model, legacy-common, batch-payment, packaging-batch-payment)
         assertThat(context.modules()).anyMatch(m -> m.artifactId().equals("batch-payment") && m.hasSpringBatch());
         assertThat(context.modules()).anyMatch(m -> m.artifactId().equals("payment-model") && m.hasJpa());
+        assertThat(context.modules()).anyMatch(m -> m.artifactId().equals("packaging-batch-payment"));
+
 
         assertThat(context.batches()).hasSize(1);
         BatchDescriptor batchJob = context.batches().get(0);
@@ -190,5 +192,18 @@ class EndToEndMigrationPlatformTest {
 
         String aiChat = orchestrator.getAiAssistant().askAssistant("Comment organiser mes modules en DDD ?", null, List.of());
         assertThat(aiChat).contains("Bounded Contexts");
+
+        // 15. Verify Module & Packaging Reorganization
+        ModuleReorganizationPlan reorgPlan = context.moduleReorganizationPlan();
+        assertThat(reorgPlan).isNotNull();
+        assertThat(reorgPlan.groups()).isNotEmpty();
+        assertThat(reorgPlan.groups()).anyMatch(g -> g.packagingArtifactId().equals("packaging-batch-payment"));
+        PackagingSubProjectGroup pkgGroup = reorgPlan.groups().stream()
+                .filter(g -> g.packagingArtifactId().equals("packaging-batch-payment"))
+                .findFirst().orElseThrow();
+        assertThat(pkgGroup.targetSubProjectDir()).isEqualTo("batch-payment-app");
+        assertThat(pkgGroup.childModules()).anyMatch(c -> c.moduleArtifactId().equals("payment-model"));
+        assertThat(reorgPlan.unassignedModules()).contains("legacy-common");
     }
 }
+

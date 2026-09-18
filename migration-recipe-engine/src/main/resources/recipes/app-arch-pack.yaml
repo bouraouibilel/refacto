@@ -30,3 +30,19 @@ recipes:
     status: APPROVED
     author: APP Architecture
     rationale: Externaliser les utilitaires techniques purs et exclure la logique métier.
+
+  - id: APP-ARCH-003
+    version: "1.0"
+    name: Réorganisation des packagings en sous-projets groupés
+    category: ARCHITECTURE
+    severity: MEDIUM
+    detectorEngine: AST
+    automationLevel: REVIEW_REQUIRED
+    recipeClassName: com.app.rewrite.ReorganisePackaging
+    dependsOn: []
+    validation: [compilation, unit-tests]
+    tags: [architecture, packaging, reorganization, openrewrite]
+    status: APPROVED
+    author: APP Architecture
+    rationale: Transformer chaque module de packaging en structure de sous-projet sans préfixe packaging- et y déplacer tous les modules référencés.
+

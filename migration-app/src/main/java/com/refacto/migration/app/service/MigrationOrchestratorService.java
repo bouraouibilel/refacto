@@ -15,6 +15,7 @@ import com.refacto.migration.recipe.RiskScoringService;
 import com.refacto.migration.reporting.ReportingEngineService;
 import com.refacto.migration.sql.SqlAnalyzerService;
 import com.refacto.migration.transformation.DryRunService;
+import com.refacto.migration.transformation.ModuleReorganizationService;
 import com.refacto.migration.transformation.TransformationApplierService;
 import com.refacto.migration.validation.BuildValidationService;
 import org.slf4j.Logger;
@@ -53,6 +54,7 @@ public class MigrationOrchestratorService {
     private final ReportingEngineService reportingService = new ReportingEngineService();
     private final AiAssistantService aiAssistant = new AiAssistantService();
     private final com.refacto.migration.code.DddRefactoringService dddRefactoringService = new com.refacto.migration.code.DddRefactoringService();
+    private final com.refacto.migration.transformation.ModuleReorganizationService moduleReorganizationService = new com.refacto.migration.transformation.ModuleReorganizationService();
 
     // In-memory state store for analyses and campaigns
     private final Map<String, Project> projects = new ConcurrentHashMap<>();
@@ -74,8 +76,10 @@ public class MigrationOrchestratorService {
             DryRunResult dryRunResult,
             ValidationResult validationResult,
             List<PerformanceComparison> performanceComparisons,
-            DddRefactoringPlan dddPlan
+            DddRefactoringPlan dddPlan,
+            ModuleReorganizationPlan moduleReorganizationPlan
     ) {}
+
 
     public Project registerProject(String name, String localPathOrUri, String branch) {
         String id = UUID.randomUUID().toString().substring(0, 8);
@@ -156,6 +160,9 @@ public class MigrationOrchestratorService {
                 rootPath, modules, batches, archResult.couplings()
         );
 
+        // 10. Module & Packaging Reorganization Plan
+        ModuleReorganizationPlan moduleReorgPlan = moduleReorganizationService.analyzeReorganization(rootPath, modules);
+
         String analysisId = UUID.randomUUID().toString().substring(0, 8);
         AnalysisContext context = new AnalysisContext(
                 analysisId,
@@ -172,7 +179,8 @@ public class MigrationOrchestratorService {
                 dryRunResult,
                 null,
                 new ArrayList<>(),
-                dddPlan
+                dddPlan,
+                moduleReorgPlan
         );
 
         analyses.put(analysisId, context);
@@ -180,6 +188,7 @@ public class MigrationOrchestratorService {
                 analysisId, modules.size(), batches.size(), findings.size(), riskAssessment.score());
 
         return context;
+
     }
 
     public Optional<AnalysisContext> getAnalysis(String analysisId) {
@@ -270,10 +279,75 @@ public class MigrationOrchestratorService {
                 ctx.analysisId(), ctx.project(), ctx.snapshot(), ctx.modules(), ctx.batches(),
                 ctx.dependencies(), ctx.targetProfile(), ctx.findings(), ctx.riskAssessment(),
                 ctx.architectureCouplings(), ctx.waves(), ctx.dryRunResult(), valResult, ctx.performanceComparisons(),
-                ctx.dddPlan()
+                ctx.dddPlan(), ctx.moduleReorganizationPlan()
         );
         analyses.put(analysisId, updated);
         return valResult;
+    }
+
+    public Path resolveProjectRoot(Project project) {
+        Path rootPath = Paths.get(project.repositoryUri());
+        if (!Files.exists(rootPath)) {
+            Path fallback = Paths.get("..").resolve(project.repositoryUri()).normalize();
+            if (Files.exists(fallback)) {
+                rootPath = fallback;
+            }
+        }
+        return rootPath;
+    }
+
+    public ModuleReorganizationPlan getModuleReorganizationPlan(String analysisId) {
+        AnalysisContext ctx = analyses.get(analysisId);
+        if (ctx == null) {
+            throw new IllegalArgumentException("Analyse introuvable : " + analysisId);
+        }
+        if (ctx.moduleReorganizationPlan() != null) {
+            return ctx.moduleReorganizationPlan();
+        }
+        Path rootPath = resolveProjectRoot(ctx.project());
+        ModuleReorganizationPlan plan = moduleReorganizationService.analyzeReorganization(rootPath, ctx.modules());
+        AnalysisContext updated = new AnalysisContext(
+                ctx.analysisId(), ctx.project(), ctx.snapshot(), ctx.modules(), ctx.batches(),
+                ctx.dependencies(), ctx.targetProfile(), ctx.findings(), ctx.riskAssessment(),
+                ctx.architectureCouplings(), ctx.waves(), ctx.dryRunResult(), ctx.validationResult(),
+                ctx.performanceComparisons(), ctx.dddPlan(), plan
+        );
+        analyses.put(analysisId, updated);
+        return plan;
+    }
+
+    public ModuleReorganizationPlan previewModuleReorganization(String analysisId, ModuleReorganizationPlan customizedPlan) {
+        AnalysisContext ctx = analyses.get(analysisId);
+        if (ctx == null) {
+            throw new IllegalArgumentException("Analyse introuvable : " + analysisId);
+        }
+        Path rootPath = resolveProjectRoot(ctx.project());
+        ModuleReorganizationPlan preview = moduleReorganizationService.previewCustomizedPlan(rootPath, customizedPlan);
+        AnalysisContext updated = new AnalysisContext(
+                ctx.analysisId(), ctx.project(), ctx.snapshot(), ctx.modules(), ctx.batches(),
+                ctx.dependencies(), ctx.targetProfile(), ctx.findings(), ctx.riskAssessment(),
+                ctx.architectureCouplings(), ctx.waves(), ctx.dryRunResult(), ctx.validationResult(),
+                ctx.performanceComparisons(), ctx.dddPlan(), preview
+        );
+        analyses.put(analysisId, updated);
+        return preview;
+    }
+
+    public ModuleReorganizationPlan applyModuleReorganization(String analysisId, ModuleReorganizationPlan planToApply) throws Exception {
+        AnalysisContext ctx = analyses.get(analysisId);
+        if (ctx == null) {
+            throw new IllegalArgumentException("Analyse introuvable : " + analysisId);
+        }
+        Path rootPath = resolveProjectRoot(ctx.project());
+        ModuleReorganizationPlan applied = moduleReorganizationService.applyReorganization(rootPath, planToApply);
+        AnalysisContext updated = new AnalysisContext(
+                ctx.analysisId(), ctx.project(), ctx.snapshot(), ctx.modules(), ctx.batches(),
+                ctx.dependencies(), ctx.targetProfile(), ctx.findings(), ctx.riskAssessment(),
+                ctx.architectureCouplings(), ctx.waves(), ctx.dryRunResult(), ctx.validationResult(),
+                ctx.performanceComparisons(), ctx.dddPlan(), applied
+        );
+        analyses.put(analysisId, updated);
+        return applied;
     }
 
     public MigrationReport generateReport(String analysisId) {
@@ -337,5 +411,9 @@ public class MigrationOrchestratorService {
 
     public com.refacto.migration.code.DddRefactoringService getDddRefactoringService() {
         return dddRefactoringService;
+    }
+
+    public ModuleReorganizationService getModuleReorganizationService() {
+        return moduleReorganizationService;
     }
 }
