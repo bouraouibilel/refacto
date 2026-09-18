@@ -163,4 +163,79 @@ class ModuleReorganizationServiceTest {
         assertThat(rootPomContent).doesNotContain("<module>packaging-payment</module>");
         assertThat(rootPomContent).doesNotContain("<module>payment-service</module>");
     }
+
+    @Test
+    void shouldSupportDynamicGroupCreationAndModuleReassignment(@TempDir Path tempDir) throws IOException {
+        // Setup base project with 2 modules
+        Files.writeString(tempDir.resolve("pom.xml"), """
+                <project>
+                    <groupId>com.sample</groupId>
+                    <artifactId>sample-app</artifactId>
+                    <version>1.0.0</version>
+                    <modules>
+                        <module>module-a</module>
+                        <module>module-b</module>
+                    </modules>
+                </project>
+                """);
+
+        Path modA = tempDir.resolve("module-a");
+        Files.createDirectories(modA);
+        Files.writeString(modA.resolve("pom.xml"), "<project><artifactId>module-a</artifactId></project>");
+
+        Path modB = tempDir.resolve("module-b");
+        Files.createDirectories(modB);
+        Files.writeString(modB.resolve("pom.xml"), "<project><artifactId>module-b</artifactId></project>");
+
+        // Manually create a new group "custom-suite" containing "module-a", leaving "module-b" as unassigned
+        PackagingSubProjectGroup newGroup = new PackagingSubProjectGroup(
+                "custom-suite-pack",
+                "custom-suite",
+                "custom-suite",
+                List.of(new ModuleReorganizationItem("module-a", "module-a", "custom-suite/module-a", true)),
+                true,
+                "MANUAL"
+        );
+
+        ModuleReorganizationPlan customPlan = new ModuleReorganizationPlan(
+                "pom.xml",
+                List.of(newGroup),
+                List.of("module-b"),
+                "",
+                java.util.Map.of(),
+                List.of(),
+                false,
+                "Test custom plan"
+        );
+
+        // Preview
+        ModuleReorganizationPlan preview = service.previewCustomizedPlan(tempDir, customPlan);
+        assertThat(preview.rootPomDiff()).contains("+        <module>custom-suite</module>");
+        assertThat(preview.rootPomDiff()).contains("<module>module-b</module>");
+        assertThat(preview.subProjectPomDiffs()).containsKey("custom-suite/pom.xml");
+
+        // Apply
+        ModuleReorganizationPlan applied = service.applyReorganization(tempDir, preview);
+        assertThat(applied.applied()).isTrue();
+
+        // Check file system
+        assertThat(tempDir.resolve("custom-suite")).exists().isDirectory();
+        assertThat(tempDir.resolve("custom-suite").resolve("pom.xml")).exists();
+        String subPom = Files.readString(tempDir.resolve("custom-suite").resolve("pom.xml"));
+        assertThat(subPom).contains("<artifactId>custom-suite-pack</artifactId>");
+        assertThat(subPom).contains("<module>module-a</module>");
+
+        // module-a is moved inside custom-suite
+        assertThat(tempDir.resolve("custom-suite").resolve("module-a")).exists();
+        assertThat(tempDir.resolve("module-a")).doesNotExist();
+
+        // module-b remained at root
+        assertThat(tempDir.resolve("module-b")).exists();
+
+        // root pom has both custom-suite and module-b
+        String finalRootPom = Files.readString(tempDir.resolve("pom.xml"));
+        assertThat(finalRootPom).contains("<module>custom-suite</module>");
+        assertThat(finalRootPom).contains("<module>module-b</module>");
+        assertThat(finalRootPom).doesNotContain("<module>module-a</module>");
+    }
 }

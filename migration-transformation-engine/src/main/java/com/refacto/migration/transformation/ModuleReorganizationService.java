@@ -138,21 +138,31 @@ public class ModuleReorganizationService {
         for (PackagingSubProjectGroup group : plan.groups()) {
             if (!group.included()) continue;
 
-            Path originalPkgPom = rootPath.resolve(group.originalPackagingDir()).resolve("pom.xml");
-            String originalPkgPomContent = readFileContent(originalPkgPom);
-            String revisedPkgPomContent = computeRevisedSubProjectPom(originalPkgPomContent, group);
+            Path originalPkgPom = (group.originalPackagingDir() != null && !group.originalPackagingDir().isBlank())
+                    ? rootPath.resolve(group.originalPackagingDir()).resolve("pom.xml")
+                    : null;
+            String originalPkgPomContent = (originalPkgPom != null && Files.exists(originalPkgPom))
+                    ? readFileContent(originalPkgPom)
+                    : "";
+            String revisedPkgPomContent = computeRevisedSubProjectPom(originalPkgPomContent, group, originalRootPomContent);
 
             String diffKey = group.targetSubProjectDir() + "/pom.xml";
             subProjectDiffs.put(diffKey, diffGenerator.generateUnifiedDiff(diffKey, originalPkgPomContent, revisedPkgPomContent));
 
             // Commande git pour déplacer le dossier packaging vers le sous-projet
-            gitCommands.add(String.format("git mv \"%s\" \"%s\"", group.originalPackagingDir(), group.targetSubProjectDir()));
+            if (group.originalPackagingDir() != null
+                    && !group.originalPackagingDir().isBlank()
+                    && Files.exists(rootPath.resolve(group.originalPackagingDir()))
+                    && !group.originalPackagingDir().equals(group.targetSubProjectDir())) {
+                gitCommands.add(String.format("git mv \"%s\" \"%s\"", group.originalPackagingDir(), group.targetSubProjectDir()));
+            }
 
             // Commandes git pour déplacer chaque module enfant dans le sous-projet
             for (ModuleReorganizationItem child : group.childModules()) {
                 if (child.included()) {
+                    String childName = Paths.get(child.originalRelativePath()).getFileName().toString();
                     gitCommands.add(String.format("git mv \"%s\" \"%s/%s\"",
-                            child.originalRelativePath(), group.targetSubProjectDir(), child.originalRelativePath()));
+                            child.originalRelativePath(), group.targetSubProjectDir(), childName));
                 }
             }
         }
@@ -181,11 +191,13 @@ public class ModuleReorganizationService {
         for (PackagingSubProjectGroup group : computedPlan.groups()) {
             if (!group.included()) continue;
 
-            Path origPkgDir = rootPath.resolve(group.originalPackagingDir());
+            Path origPkgDir = (group.originalPackagingDir() != null && !group.originalPackagingDir().isBlank())
+                    ? rootPath.resolve(group.originalPackagingDir())
+                    : null;
             Path targetSubDir = rootPath.resolve(group.targetSubProjectDir());
 
-            // 1. Déplacer le répertoire du packaging vers le sous-projet
-            if (Files.exists(origPkgDir)) {
+            // 1. Déplacer le répertoire du packaging vers le sous-projet s'il existe
+            if (origPkgDir != null && Files.exists(origPkgDir)) {
                 if (!origPkgDir.equals(targetSubDir)) {
                     safeMoveDirectory(rootPath, origPkgDir, targetSubDir, isGit);
                 }
@@ -206,8 +218,10 @@ public class ModuleReorganizationService {
 
             // 3. Écrire le nouveau pom.xml du sous-projet
             Path subPomPath = targetSubDir.resolve("pom.xml");
-            String originalSubPom = readFileContent(subPomPath);
-            String revisedSubPom = computeRevisedSubProjectPom(originalSubPom, group);
+            String originalSubPom = Files.exists(subPomPath) ? readFileContent(subPomPath) : "";
+            Path rootPomPath = rootPath.resolve("pom.xml");
+            String originalRootPom = readFileContent(rootPomPath);
+            String revisedSubPom = computeRevisedSubProjectPom(originalSubPom, group, originalRootPom);
             Files.writeString(subPomPath, revisedSubPom, StandardCharsets.UTF_8);
         }
 
@@ -374,7 +388,9 @@ public class ModuleReorganizationService {
 
         for (PackagingSubProjectGroup g : plan.groups()) {
             if (!g.included()) continue;
-            removedModules.add(g.originalPackagingDir());
+            if (g.originalPackagingDir() != null && !g.originalPackagingDir().isBlank()) {
+                removedModules.add(g.originalPackagingDir());
+            }
             for (ModuleReorganizationItem child : g.childModules()) {
                 if (child.included()) {
                     removedModules.add(child.originalRelativePath());
@@ -401,6 +417,15 @@ public class ModuleReorganizationService {
             }
         }
 
+        // Réinjecter les modules transverses / non assignés s'ils ne sont pas déjà présents
+        if (plan.unassignedModules() != null) {
+            for (String unassigned : plan.unassignedModules()) {
+                if (!retained.contains(unassigned) && !removedModules.contains(unassigned)) {
+                    retained.add(unassigned);
+                }
+            }
+        }
+
         // Ajouter les nouveaux sous-projets
         for (String sub : addedSubProjects) {
             if (!retained.contains(sub)) {
@@ -419,9 +444,7 @@ public class ModuleReorganizationService {
                 originalContent.substring(modulesMatcher.end(1));
     }
 
-    private String computeRevisedSubProjectPom(String originalContent, PackagingSubProjectGroup group) {
-        if (originalContent == null || originalContent.isBlank()) return "";
-
+    private String computeRevisedSubProjectPom(String originalContent, PackagingSubProjectGroup group, String rootPomContent) {
         List<String> childDirs = group.childModules().stream()
                 .filter(ModuleReorganizationItem::included)
                 .map(item -> Paths.get(item.originalRelativePath()).getFileName().toString())
@@ -432,6 +455,32 @@ public class ModuleReorganizationService {
             modulesXml.append("        <module>").append(c).append("</module>\n");
         }
         modulesXml.append("    </modules>\n");
+
+        if (originalContent == null || originalContent.isBlank()) {
+            String parentGroupId = extractRootTag(rootPomContent, "groupId", "com.sample.legacy");
+            String parentArtifactId = extractRootTag(rootPomContent, "artifactId", "sample-legacy-app");
+            String parentVersion = extractRootTag(rootPomContent, "version", "1.0.0");
+            String artId = (group.packagingArtifactId() != null && !group.packagingArtifactId().isBlank())
+                    ? group.packagingArtifactId()
+                    : group.targetSubProjectDir();
+
+            return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+                    "<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n" +
+                    "         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n" +
+                    "         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd\">\n" +
+                    "    <modelVersion>4.0.0</modelVersion>\n" +
+                    "    <parent>\n" +
+                    "        <groupId>" + parentGroupId + "</groupId>\n" +
+                    "        <artifactId>" + parentArtifactId + "</artifactId>\n" +
+                    "        <version>" + parentVersion + "</version>\n" +
+                    "        <relativePath>../pom.xml</relativePath>\n" +
+                    "    </parent>\n\n" +
+                    "    <artifactId>" + artId + "</artifactId>\n" +
+                    "    <packaging>pom</packaging>\n" +
+                    "    <name>" + artId + "</name>\n\n" +
+                    modulesXml +
+                    "</project>\n";
+        }
 
         // Si le POM a déjà un bloc <modules>, le remplacer
         Matcher mMatcher = Pattern.compile("(?s)<modules>.*?</modules>").matcher(originalContent);
@@ -448,14 +497,37 @@ public class ModuleReorganizationService {
             revised = revised.replaceFirst("(<artifactId>.*?</artifactId>)", "$1\n    <packaging>pom</packaging>");
         }
 
+        // Remplacer l'artifactId si personnalisé
+        if (group.packagingArtifactId() != null && !group.packagingArtifactId().isBlank()) {
+            String currentArtId = extractArtifactIdFromContent(revised);
+            if (!currentArtId.isBlank() && !currentArtId.equals(group.packagingArtifactId())) {
+                revised = revised.replaceFirst("<artifactId>\\s*" + Pattern.quote(currentArtId) + "\\s*</artifactId>",
+                        "<artifactId>" + group.packagingArtifactId() + "</artifactId>");
+            }
+        }
+
         // Insérer <modules> avant <dependencies> ou avant </project>
         if (revised.contains("<dependencies>")) {
-            return revised.replace("<dependencies>", modulesXml.toString() + "\n    <dependencies>");
+            return revised.replace("<dependencies>", modulesXml + "\n    <dependencies>");
         } else if (revised.contains("</project>")) {
-            return revised.replace("</project>", modulesXml.toString() + "</project>");
+            return revised.replace("</project>", modulesXml + "</project>");
         }
 
         return revised;
+    }
+
+    private String extractRootTag(String xml, String tag, String fallback) {
+        if (xml == null || xml.isBlank()) return fallback;
+        String noParent = xml.replaceAll("(?s)<parent>.*?</parent>", "");
+        Matcher m = Pattern.compile("<" + tag + ">\\s*([^<\\s]+)\\s*</" + tag + ">").matcher(noParent);
+        return m.find() ? m.group(1).trim() : fallback;
+    }
+
+    private String extractArtifactIdFromContent(String xml) {
+        if (xml == null || xml.isBlank()) return "";
+        String noParent = xml.replaceAll("(?s)<parent>.*?</parent>", "");
+        Matcher m = Pattern.compile("<artifactId>\\s*([^<\\s]+)\\s*</artifactId>").matcher(noParent);
+        return m.find() ? m.group(1).trim() : "";
     }
 
     private String readFileContent(Path path) {

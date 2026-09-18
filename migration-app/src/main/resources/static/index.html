@@ -533,23 +533,49 @@
             <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
                     <div>
-                        <h3 class="font-bold text-slate-900 text-lg">Groupes de Sous-Projets Détectés</h3>
-                        <p class="text-xs text-slate-500">Personnalisez le nom du dossier cible et sélectionnez les modules enfants à intégrer à l'intérieur.</p>
+                        <h3 class="font-bold text-slate-900 text-lg">Groupes de Sous-Projets Détectés &amp; Personnalisables</h3>
+                        <p class="text-xs text-slate-500">Ajoutez, modifiez ou supprimez des sous-projets, et glissez-déposez (<span class="font-semibold text-teal-700">Drag &amp; Drop</span>) les modules entre sous-projets ou vers la racine.</p>
                     </div>
-                    <button onclick="recalculateReorgPreview()" class="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 flex items-center space-x-1.5 transition">
-                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                        <span>Recalculer la Prévisualisation & Diffs</span>
-                    </button>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="openAddReorgGroupModal()" class="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg shadow-xs flex items-center space-x-1.5 transition">
+                            <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i>
+                            <span>+ Nouveau Sous-Projet</span>
+                        </button>
+                        <button onclick="recalculateReorgPreview()" class="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 flex items-center space-x-1.5 transition">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                            <span>Recalculer les Diffs</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div id="reorgGroupsContainer" class="space-y-4">
                     <div class="text-xs text-slate-400">Chargement de la proposition de réorganisation...</div>
                 </div>
 
-                <!-- Unassigned / Transverse Modules List -->
-                <div id="reorgUnassignedContainer" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs hidden">
-                    <span class="font-bold text-slate-700">Modules Transverses (Non déplacés, restant à la racine) :</span>
-                    <div id="reorgUnassignedList" class="flex flex-wrap gap-1.5 mt-2"></div>
+                <!-- Unassigned / Transverse Modules List (Drop target) -->
+                <div id="reorgUnassignedContainer"
+                     ondragover="onReorgDragOver(event, 'UNASSIGNED')"
+                     ondragleave="onReorgDragLeave(event, 'UNASSIGNED')"
+                     ondrop="onReorgDrop(event, 'UNASSIGNED')"
+                     class="p-4 rounded-xl bg-slate-50/80 border-2 border-dashed border-slate-300 text-xs transition space-y-2">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div class="flex items-center space-x-2">
+                            <div class="p-1.5 bg-slate-200 rounded-lg text-slate-700">
+                                <i data-lucide="shield" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <span class="font-bold text-slate-800">Modules Transverses (Racine / Non assignés à un sous-projet) :</span>
+                                <span id="reorgUnassignedCount" class="ml-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-200 text-slate-700">0</span>
+                            </div>
+                        </div>
+                        <span class="text-[11px] text-slate-400 italic flex items-center space-x-1">
+                            <i data-lucide="move" class="w-3 h-3 text-slate-400"></i>
+                            <span>Glissez un module ici pour le détacher d'un sous-projet</span>
+                        </span>
+                    </div>
+                    <div id="reorgUnassignedList" class="flex flex-wrap gap-2 pt-1 min-h-[36px] items-center">
+                        <div class="text-slate-400 italic text-[11px]">Aucun module transverse. Déposez un module ici pour le conserver à la racine.</div>
+                    </div>
                 </div>
             </div>
 
@@ -864,6 +890,40 @@
                     <button onclick="closeAiSettingsModal()" class="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs">Annuler</button>
                     <button onclick="saveLlmSettings()" class="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-xs">Enregistrer</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Reorg Group Modal -->
+    <div id="modalAddReorgGroup" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+                <h3 class="font-bold text-slate-900 text-sm flex items-center space-x-1.5">
+                    <i data-lucide="folder-plus" class="w-4 h-4 text-teal-600"></i>
+                    <span>Ajouter un Nouveau Sous-Projet</span>
+                </h3>
+                <button onclick="closeAddReorgGroupModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nom du dossier du sous-projet <span class="text-red-500">*</span></label>
+                    <input type="text" id="newGroupTargetDir" placeholder="ex: reporting, batch-core" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                    <p class="text-[11px] text-slate-400 mt-1">Nom du répertoire cible qui agrégera les modules enfants.</p>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">ArtifactId Maven du sous-projet (Optionnel)</label>
+                    <input type="text" id="newGroupArtifactId" placeholder="ex: reporting-parent" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-teal-500 focus:outline-none">
+                    <p class="text-[11px] text-slate-400 mt-1">Si omis, prendra la valeur du nom du dossier.</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
+                <button onclick="closeAddReorgGroupModal()" class="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs">Annuler</button>
+                <button onclick="confirmAddReorgGroup()" class="px-3.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center space-x-1">
+                    <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                    <span>Créer le Sous-Projet</span>
+                </button>
             </div>
         </div>
     </div>
@@ -1955,6 +2015,7 @@
         // ==========================================
 
         window.currentReorgPlan = null;
+        let draggedModuleInfo = null;
 
         async function fetchReorgPlan() {
             if (!currentAnalysis) return;
@@ -1974,98 +2035,156 @@
             const container = document.getElementById('reorgGroupsContainer');
             const unassignedBox = document.getElementById('reorgUnassignedContainer');
             const unassignedList = document.getElementById('reorgUnassignedList');
+            const unassignedCount = document.getElementById('reorgUnassignedCount');
             const rootDiffEl = document.getElementById('reorgRootPomDiff');
             const gitCmdsEl = document.getElementById('reorgGitCommands');
             const subDiffsContainer = document.getElementById('reorgSubProjectPomDiffs');
 
-            if (!plan || !plan.groups || plan.groups.length === 0) {
-                if (container) container.innerHTML = '<div class="text-xs text-slate-400 p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">Aucun module de packaging détecté pour la réorganisation.</div>';
-                if (unassignedBox) unassignedBox.classList.add('hidden');
-                if (rootDiffEl) rootDiffEl.innerText = "Aucune modification.";
-                if (gitCmdsEl) gitCmdsEl.innerText = "Aucune commande nécessaire.";
-                if (subDiffsContainer) subDiffsContainer.innerHTML = '<div class="text-xs text-slate-400">Aucun sous-projet créé.</div>';
+            if (!plan) {
+                if (container) container.innerHTML = '<div class="text-xs text-slate-400 p-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">Aucun plan disponible.</div>';
                 return;
             }
 
             // Render groups
             if (container) {
-                container.innerHTML = plan.groups.map(g => {
-                    const isGroupIncluded = g.included !== false;
-                    return `
-                        <div class="p-4 rounded-xl border ${isGroupIncluded ? 'border-teal-200 bg-teal-50/20' : 'border-slate-200 bg-slate-50/50 opacity-60'} transition space-y-4 shadow-2xs">
-                            <!-- Group Header -->
-                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b ${isGroupIncluded ? 'border-teal-100' : 'border-slate-200'}">
-                                <div class="flex items-center space-x-2.5">
-                                    <input type="checkbox" id="chkGroup_${escapeHtml(g.originalPackagingDir)}" ${isGroupIncluded ? 'checked' : ''} onchange="onReorgGroupToggled('${escapeHtml(g.originalPackagingDir)}', this.checked)" class="rounded text-teal-600 focus:ring-teal-500 w-4 h-4">
-                                    <div>
-                                        <div class="flex items-center space-x-2">
-                                            <span class="font-bold text-slate-900 text-sm font-mono">${escapeHtml(g.originalPackagingDir)}</span>
-                                            <span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-teal-100 text-teal-800">Sous-Projet Cible</span>
+                if (!plan.groups || plan.groups.length === 0) {
+                    container.innerHTML = `
+                        <div class="p-6 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-2">
+                            <i data-lucide="folder-dashed" class="w-8 h-8 text-slate-400 mx-auto"></i>
+                            <div class="text-xs font-semibold text-slate-600">Aucun sous-projet pour l'instant.</div>
+                            <div class="text-[11px] text-slate-400">Cliquez sur « + Nouveau Sous-Projet » pour en créer un et y déposer des modules.</div>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = plan.groups.map(g => {
+                        const isGroupIncluded = g.included !== false;
+                        const isManual = g.status === 'MANUAL';
+                        return `
+                            <div id="groupCard_${escapeHtml(g.targetSubProjectDir)}"
+                                 ondragover="onReorgDragOver(event, '${escapeHtml(g.targetSubProjectDir)}')"
+                                 ondragleave="onReorgDragLeave(event, '${escapeHtml(g.targetSubProjectDir)}')"
+                                 ondrop="onReorgDrop(event, '${escapeHtml(g.targetSubProjectDir)}')"
+                                 class="p-4 rounded-xl border-2 ${isGroupIncluded ? 'border-teal-200 bg-teal-50/20' : 'border-slate-200 bg-slate-50/50 opacity-60'} transition space-y-4 shadow-2xs">
+                                
+                                <!-- Group Header -->
+                                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b ${isGroupIncluded ? 'border-teal-100' : 'border-slate-200'}">
+                                    <div class="flex items-center space-x-2.5">
+                                        <input type="checkbox" id="chkGroup_${escapeHtml(g.targetSubProjectDir)}" ${isGroupIncluded ? 'checked' : ''} onchange="onReorgGroupToggled('${escapeHtml(g.targetSubProjectDir)}', this.checked)" class="rounded text-teal-600 focus:ring-teal-500 w-4 h-4">
+                                        <div>
+                                            <div class="flex items-center space-x-2">
+                                                <span class="font-bold text-slate-900 text-sm font-mono">${escapeHtml(g.targetSubProjectDir)}</span>
+                                                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${isManual ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'}">
+                                                    ${isManual ? 'Sous-Projet Manuel' : 'Sous-Projet Cible'}
+                                                </span>
+                                            </div>
+                                            <div class="text-[11px] text-slate-500 mt-0.5">
+                                                Origine : <strong class="font-mono text-slate-700">${escapeHtml(g.originalPackagingDir || 'Nouveau')}</strong>
+                                            </div>
                                         </div>
-                                        <div class="text-[11px] text-slate-500 mt-0.5">
-                                            ArtifactId Maven préservé : <strong class="font-mono text-teal-950">${escapeHtml(g.packagingArtifactId)}</strong>
+                                    </div>
+
+                                    <!-- Inputs and Actions -->
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <div class="flex items-center space-x-1.5">
+                                            <label class="text-[11px] font-semibold text-slate-600 whitespace-nowrap">ArtifactId :</label>
+                                            <input type="text" value="${escapeHtml(g.packagingArtifactId || g.targetSubProjectDir)}" onchange="onReorgArtifactIdChanged('${escapeHtml(g.targetSubProjectDir)}', this.value)" class="px-2.5 py-1 border border-slate-300 rounded-lg text-xs font-mono bg-white text-slate-900 focus:ring-2 focus:ring-teal-500 shadow-2xs w-40" placeholder="artifactId">
                                         </div>
+
+                                        <div class="flex items-center space-x-1.5">
+                                            <label class="text-[11px] font-semibold text-slate-600 whitespace-nowrap">Dossier Cible :</label>
+                                            <input type="text" value="${escapeHtml(g.targetSubProjectDir)}" onchange="onReorgTargetDirChanged('${escapeHtml(g.targetSubProjectDir)}', this.value)" class="px-2.5 py-1 border border-teal-300 rounded-lg text-xs font-mono font-bold bg-white text-teal-950 focus:ring-2 focus:ring-teal-500 shadow-2xs w-36" placeholder="dossier-cible">
+                                        </div>
+
+                                        <button onclick="deleteReorgGroup('${escapeHtml(g.targetSubProjectDir)}')" title="Supprimer ce sous-projet (ses modules seront replacés à la racine)" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition ml-1">
+                                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                        </button>
                                     </div>
                                 </div>
 
-                                <!-- Target Sub-Project Directory Input -->
-                                <div class="flex items-center space-x-2">
-                                    <label class="text-xs font-semibold text-slate-600 whitespace-nowrap">Dossier Cible :</label>
-                                    <input type="text" id="targetDir_${escapeHtml(g.originalPackagingDir)}" value="${escapeHtml(g.targetSubProjectDir)}" onchange="onReorgTargetDirChanged('${escapeHtml(g.originalPackagingDir)}', this.value)" class="px-3 py-1.5 border border-teal-300 rounded-lg text-xs font-mono font-bold bg-white text-teal-950 focus:ring-2 focus:ring-teal-500 shadow-2xs w-48" placeholder="nom-dossier">
-                                </div>
-                            </div>
+                                <!-- Child modules table / Drop area -->
+                                <div>
+                                    <div class="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between">
+                                        <div class="flex items-center space-x-1.5">
+                                            <i data-lucide="layers" class="w-3.5 h-3.5 text-teal-600"></i>
+                                            <span>Modules Intégrés dans ce Sous-Projet (${(g.childModules || []).length}) :</span>
+                                        </div>
+                                        <span class="text-[10px] text-slate-400 font-normal">Glissez-déposez un module pour le déplacer vers un autre groupe ou la racine</span>
+                                    </div>
 
-                            <!-- Child modules table -->
-                            <div>
-                                <div class="text-xs font-bold text-slate-700 mb-2 flex items-center justify-between">
-                                    <span>Modules Référencés &amp; Déplacés à l'Intérieur (${(g.childModules || []).length}) :</span>
-                                    <span class="text-[10px] text-slate-400 font-normal">Cocher/décocher pour inclure ou exclure un module</span>
-                                </div>
-                                <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-slate-200 text-xs bg-white rounded-lg border border-slate-200">
-                                        <thead class="bg-slate-50">
-                                            <tr>
-                                                <th class="px-3 py-2 text-left font-semibold text-slate-600 w-10">Déplacer</th>
-                                                <th class="px-3 py-2 text-left font-semibold text-slate-600">Module (ArtifactId)</th>
-                                                <th class="px-3 py-2 text-left font-semibold text-slate-600">Chemin Actuel</th>
-                                                <th class="px-3 py-2 text-left font-semibold text-slate-600">Nouveau Chemin Cible</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-slate-100">
-                                            ${(g.childModules || []).map(child => {
-                                                const isChildIncluded = child.included !== false;
-                                                return `
-                                                    <tr class="hover:bg-slate-50 transition">
-                                                        <td class="px-3 py-2 text-center">
-                                                            <input type="checkbox" ${isChildIncluded ? 'checked' : ''} onchange="onReorgChildToggled('${escapeHtml(g.originalPackagingDir)}', '${escapeHtml(child.moduleArtifactId)}', this.checked)" class="rounded text-teal-600 focus:ring-teal-500">
-                                                        </td>
-                                                        <td class="px-3 py-2 font-mono font-bold text-slate-800">${escapeHtml(child.moduleArtifactId)}</td>
-                                                        <td class="px-3 py-2 font-mono text-slate-500">${escapeHtml(child.originalRelativePath)}</td>
-                                                        <td class="px-3 py-2 font-mono font-semibold text-teal-900">${escapeHtml(g.targetSubProjectDir)}/${escapeHtml(child.originalRelativePath)}</td>
+                                    ${(g.childModules && g.childModules.length > 0) ? `
+                                        <div class="overflow-x-auto">
+                                            <table class="min-w-full divide-y divide-slate-200 text-xs bg-white rounded-lg border border-slate-200">
+                                                <thead class="bg-slate-50">
+                                                    <tr>
+                                                        <th class="px-2 py-2 text-center w-8"></th>
+                                                        <th class="px-3 py-2 text-left font-semibold text-slate-600 w-10">Actif</th>
+                                                        <th class="px-3 py-2 text-left font-semibold text-slate-600">Module (ArtifactId)</th>
+                                                        <th class="px-3 py-2 text-left font-semibold text-slate-600">Chemin Actuel</th>
+                                                        <th class="px-3 py-2 text-left font-semibold text-slate-600">Chemin Cible dans le Sous-Projet</th>
+                                                        <th class="px-2 py-2 text-center w-12">Action</th>
                                                     </tr>
-                                                `;
-                                            }).join('') || '<tr><td colspan="4" class="px-3 py-3 text-center text-slate-400">Aucun module enfant référencé.</td></tr>'}
-                                        </tbody>
-                                    </table>
+                                                </thead>
+                                                <tbody class="divide-y divide-slate-100">
+                                                    ${g.childModules.map(child => {
+                                                        const isChildIncluded = child.included !== false;
+                                                        return `
+                                                            <tr draggable="true"
+                                                                ondragstart="onModuleDragStart(event, '${escapeHtml(g.targetSubProjectDir)}', '${escapeHtml(child.moduleArtifactId)}', '${escapeHtml(child.originalRelativePath)}')"
+                                                                ondragend="onModuleDragEnd(event)"
+                                                                class="hover:bg-teal-50/40 transition cursor-grab active:cursor-grabbing group">
+                                                                <td class="px-2 py-2 text-center text-slate-300 group-hover:text-slate-600">
+                                                                    <i data-lucide="grip-vertical" class="w-3.5 h-3.5 mx-auto"></i>
+                                                                </td>
+                                                                <td class="px-3 py-2 text-center">
+                                                                    <input type="checkbox" ${isChildIncluded ? 'checked' : ''} onchange="onReorgChildToggled('${escapeHtml(g.targetSubProjectDir)}', '${escapeHtml(child.moduleArtifactId)}', this.checked)" class="rounded text-teal-600 focus:ring-teal-500">
+                                                                </td>
+                                                                <td class="px-3 py-2 font-mono font-bold text-slate-800">${escapeHtml(child.moduleArtifactId)}</td>
+                                                                <td class="px-3 py-2 font-mono text-slate-500">${escapeHtml(child.originalRelativePath)}</td>
+                                                                <td class="px-3 py-2 font-mono font-semibold text-teal-900">${escapeHtml(g.targetSubProjectDir)}/${escapeHtml(child.originalRelativePath)}</td>
+                                                                <td class="px-2 py-2 text-center">
+                                                                    <button onclick="moveModuleToUnassigned('${escapeHtml(g.targetSubProjectDir)}', '${escapeHtml(child.originalRelativePath)}')" title="Détacher et conserver à la racine" class="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition">
+                                                                        <i data-lucide="arrow-down-right" class="w-3.5 h-3.5"></i>
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        `;
+                                                    }).join('')}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ` : `
+                                        <div class="p-4 rounded-lg border-2 border-dashed border-teal-200 bg-white/70 text-center text-xs text-teal-700 space-y-1">
+                                            <div class="flex items-center justify-center space-x-1.5 font-semibold">
+                                                <i data-lucide="mouse-pointer-click" class="w-4 h-4 text-teal-500"></i>
+                                                <span>Zone de Dépôt</span>
+                                            </div>
+                                            <div class="text-[11px] text-slate-400">Glissez-déposez des modules ici pour les regrouper sous <code>${escapeHtml(g.targetSubProjectDir)}</code>.</div>
+                                        </div>
+                                    `}
                                 </div>
                             </div>
-                        </div>
-                    `;
-                }).join('');
+                        `;
+                    }).join('');
+                }
             }
 
-            // Render unassigned
-            if (unassignedBox && unassignedList) {
-                if (plan.unassignedModules && plan.unassignedModules.length > 0) {
-                    unassignedBox.classList.remove('hidden');
-                    unassignedList.innerHTML = plan.unassignedModules.map(u => `
-                        <span class="px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-700 font-mono text-[11px] font-semibold flex items-center space-x-1">
-                            <i data-lucide="shield" class="w-3 h-3 text-slate-400"></i>
+            // Render unassigned / transverse
+            if (unassignedList) {
+                const unassigned = plan.unassignedModules || [];
+                if (unassignedCount) unassignedCount.innerText = unassigned.length;
+
+                if (unassigned.length > 0) {
+                    unassignedList.innerHTML = unassigned.map(u => `
+                        <div draggable="true"
+                             ondragstart="onModuleDragStart(event, 'UNASSIGNED', '${escapeHtml(u)}', '${escapeHtml(u)}')"
+                             ondragend="onModuleDragEnd(event)"
+                             class="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 font-mono text-xs font-semibold flex items-center space-x-1.5 shadow-2xs hover:shadow-xs hover:border-indigo-300 cursor-grab active:cursor-grabbing transition group">
+                            <i data-lucide="grip-vertical" class="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-500"></i>
                             <span>${escapeHtml(u)}</span>
-                        </span>
+                        </div>
                     `).join('');
                 } else {
-                    unassignedBox.classList.add('hidden');
+                    unassignedList.innerHTML = '<div class="text-slate-400 italic text-[11px]">Aucun module transverse. Tous les modules sont actuellement intégrés dans des sous-projets.</div>';
                 }
             }
 
@@ -2116,32 +2235,136 @@
             lucide.createIcons();
         }
 
-        function onReorgTargetDirChanged(pkgDir, newTargetDir) {
+        // --- Modals & Group CRUD ---
+
+        function openAddReorgGroupModal() {
+            document.getElementById('newGroupTargetDir').value = '';
+            document.getElementById('newGroupArtifactId').value = '';
+            document.getElementById('modalAddReorgGroup').classList.remove('hidden');
+            setTimeout(() => document.getElementById('newGroupTargetDir').focus(), 50);
+        }
+
+        function closeAddReorgGroupModal() {
+            document.getElementById('modalAddReorgGroup').classList.add('hidden');
+        }
+
+        function confirmAddReorgGroup() {
+            const targetDirInput = document.getElementById('newGroupTargetDir');
+            const artifactIdInput = document.getElementById('newGroupArtifactId');
+            const targetDir = (targetDirInput.value || '').trim();
+            const artifactId = (artifactIdInput.value || '').trim() || targetDir;
+
+            if (!targetDir) {
+                alert("Veuillez saisir un nom de dossier pour le sous-projet.");
+                targetDirInput.focus();
+                return;
+            }
+
+            if (!window.currentReorgPlan) {
+                window.currentReorgPlan = {
+                    parentPomPath: "pom.xml",
+                    groups: [],
+                    unassignedModules: [],
+                    rootPomDiff: "",
+                    subProjectPomDiffs: {},
+                    gitMoveCommands: [],
+                    applied: false,
+                    summary: ""
+                };
+            }
+
+            const exists = (window.currentReorgPlan.groups || []).some(g => g.targetSubProjectDir === targetDir);
+            if (exists) {
+                alert(`Un sous-projet avec le dossier cible "${targetDir}" existe déjà.`);
+                return;
+            }
+
+            const newGroup = {
+                packagingArtifactId: artifactId,
+                originalPackagingDir: targetDir,
+                targetSubProjectDir: targetDir,
+                childModules: [],
+                included: true,
+                status: "MANUAL"
+            };
+
+            if (!window.currentReorgPlan.groups) window.currentReorgPlan.groups = [];
+            window.currentReorgPlan.groups.push(newGroup);
+
+            closeAddReorgGroupModal();
+            renderReorganization(window.currentReorgPlan);
+            recalculateReorgPreview();
+        }
+
+        function deleteReorgGroup(targetGroupKey) {
             if (!window.currentReorgPlan) return;
-            const cleaned = newTargetDir.trim();
+            const group = (window.currentReorgPlan.groups || []).find(g => g.targetSubProjectDir === targetGroupKey);
+            if (!group) return;
+
+            const childCount = (group.childModules || []).length;
+            const msg = childCount > 0
+                ? `Supprimer le sous-projet "${targetGroupKey}" ?\n\nSes ${childCount} module(s) enfant(s) seront reversés dans les modules transverses (racine).`
+                : `Supprimer le sous-projet "${targetGroupKey}" ?`;
+
+            if (!confirm(msg)) return;
+
+            // Reverse child modules into unassigned
+            if (!window.currentReorgPlan.unassignedModules) window.currentReorgPlan.unassignedModules = [];
+            (group.childModules || []).forEach(child => {
+                if (!window.currentReorgPlan.unassignedModules.includes(child.originalRelativePath)) {
+                    window.currentReorgPlan.unassignedModules.push(child.originalRelativePath);
+                }
+            });
+
+            // Remove group
+            window.currentReorgPlan.groups = window.currentReorgPlan.groups.filter(g => g.targetSubProjectDir !== targetGroupKey);
+
+            renderReorganization(window.currentReorgPlan);
+            recalculateReorgPreview();
+        }
+
+        function onReorgTargetDirChanged(oldTargetDir, newTargetDir) {
+            if (!window.currentReorgPlan) return;
+            const cleaned = (newTargetDir || '').trim();
             if (!cleaned) return;
-            window.currentReorgPlan.groups.forEach(g => {
-                if (g.originalPackagingDir === pkgDir) {
+            (window.currentReorgPlan.groups || []).forEach(g => {
+                if (g.targetSubProjectDir === oldTargetDir) {
                     g.targetSubProjectDir = cleaned;
+                    (g.childModules || []).forEach(c => {
+                        c.targetRelativePath = cleaned + '/' + c.originalRelativePath;
+                    });
+                }
+            });
+            renderReorganization(window.currentReorgPlan);
+            recalculateReorgPreview();
+        }
+
+        function onReorgArtifactIdChanged(targetGroupKey, newArtifactId) {
+            if (!window.currentReorgPlan) return;
+            const cleaned = (newArtifactId || '').trim();
+            if (!cleaned) return;
+            (window.currentReorgPlan.groups || []).forEach(g => {
+                if (g.targetSubProjectDir === targetGroupKey) {
+                    g.packagingArtifactId = cleaned;
                 }
             });
             recalculateReorgPreview();
         }
 
-        function onReorgGroupToggled(pkgDir, checked) {
+        function onReorgGroupToggled(targetGroupKey, checked) {
             if (!window.currentReorgPlan) return;
-            window.currentReorgPlan.groups.forEach(g => {
-                if (g.originalPackagingDir === pkgDir) {
+            (window.currentReorgPlan.groups || []).forEach(g => {
+                if (g.targetSubProjectDir === targetGroupKey) {
                     g.included = checked;
                 }
             });
             recalculateReorgPreview();
         }
 
-        function onReorgChildToggled(pkgDir, childArtifactId, checked) {
+        function onReorgChildToggled(targetGroupKey, childArtifactId, checked) {
             if (!window.currentReorgPlan) return;
-            window.currentReorgPlan.groups.forEach(g => {
-                if (g.originalPackagingDir === pkgDir) {
+            (window.currentReorgPlan.groups || []).forEach(g => {
+                if (g.targetSubProjectDir === targetGroupKey) {
                     (g.childModules || []).forEach(c => {
                         if (c.moduleArtifactId === childArtifactId) {
                             c.included = checked;
@@ -2150,6 +2373,129 @@
                 }
             });
             recalculateReorgPreview();
+        }
+
+        // --- Drag & Drop Handlers ---
+
+        function onModuleDragStart(event, sourceGroupKey, artifactId, relativePath) {
+            draggedModuleInfo = { sourceGroupKey, artifactId, relativePath };
+            event.dataTransfer.setData('application/json', JSON.stringify(draggedModuleInfo));
+            event.dataTransfer.effectAllowed = 'move';
+            if (event.currentTarget) {
+                event.currentTarget.classList.add('opacity-40');
+            }
+        }
+
+        function onModuleDragEnd(event) {
+            draggedModuleInfo = null;
+            if (event.currentTarget) {
+                event.currentTarget.classList.remove('opacity-40');
+            }
+            document.querySelectorAll('.drag-hover-active').forEach(el => {
+                el.classList.remove('drag-hover-active', 'border-teal-500', 'bg-teal-100/30', 'border-indigo-500', 'bg-indigo-100/30');
+            });
+        }
+
+        function onReorgDragOver(event, targetGroupKey) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            const dropEl = targetGroupKey === 'UNASSIGNED'
+                ? document.getElementById('reorgUnassignedContainer')
+                : document.getElementById('groupCard_' + targetGroupKey);
+
+            if (dropEl && !dropEl.classList.contains('drag-hover-active')) {
+                dropEl.classList.add('drag-hover-active');
+                if (targetGroupKey === 'UNASSIGNED') {
+                    dropEl.classList.add('border-indigo-500', 'bg-indigo-100/30');
+                } else {
+                    dropEl.classList.add('border-teal-500', 'bg-teal-100/30');
+                }
+            }
+        }
+
+        function onReorgDragLeave(event, targetGroupKey) {
+            const dropEl = targetGroupKey === 'UNASSIGNED'
+                ? document.getElementById('reorgUnassignedContainer')
+                : document.getElementById('groupCard_' + targetGroupKey);
+
+            if (dropEl) {
+                dropEl.classList.remove('drag-hover-active', 'border-teal-500', 'bg-teal-100/30', 'border-indigo-500', 'bg-indigo-100/30');
+            }
+        }
+
+        function onReorgDrop(event, targetGroupKey) {
+            event.preventDefault();
+            onReorgDragLeave(event, targetGroupKey);
+
+            let data = draggedModuleInfo;
+            if (!data) {
+                try {
+                    data = JSON.parse(event.dataTransfer.getData('application/json'));
+                } catch (e) {
+                    return;
+                }
+            }
+            if (!data || !data.sourceGroupKey || !data.relativePath) return;
+            if (data.sourceGroupKey === targetGroupKey) return;
+
+            const plan = window.currentReorgPlan;
+            if (!plan) return;
+
+            const { sourceGroupKey, artifactId, relativePath } = data;
+
+            // 1. Remove from source
+            let itemToMove = null;
+            if (sourceGroupKey === 'UNASSIGNED') {
+                plan.unassignedModules = (plan.unassignedModules || []).filter(u => u !== relativePath);
+                let realArtifactId = artifactId;
+                if (currentAnalysis && currentAnalysis.modules) {
+                    const found = currentAnalysis.modules.find(m => m.relativePath === relativePath);
+                    if (found && found.artifactId) realArtifactId = found.artifactId;
+                }
+                itemToMove = {
+                    moduleArtifactId: realArtifactId || relativePath,
+                    originalRelativePath: relativePath,
+                    targetRelativePath: '',
+                    included: true
+                };
+            } else {
+                const srcGroup = (plan.groups || []).find(g => g.targetSubProjectDir === sourceGroupKey);
+                if (srcGroup && srcGroup.childModules) {
+                    const idx = srcGroup.childModules.findIndex(c => c.originalRelativePath === relativePath || c.moduleArtifactId === artifactId);
+                    if (idx !== -1) {
+                        itemToMove = srcGroup.childModules.splice(idx, 1)[0];
+                    }
+                }
+            }
+
+            if (!itemToMove) return;
+
+            // 2. Add to destination
+            if (targetGroupKey === 'UNASSIGNED') {
+                if (!plan.unassignedModules) plan.unassignedModules = [];
+                if (!plan.unassignedModules.includes(itemToMove.originalRelativePath)) {
+                    plan.unassignedModules.push(itemToMove.originalRelativePath);
+                }
+            } else {
+                const tgtGroup = (plan.groups || []).find(g => g.targetSubProjectDir === targetGroupKey);
+                if (tgtGroup) {
+                    if (!tgtGroup.childModules) tgtGroup.childModules = [];
+                    itemToMove.targetRelativePath = tgtGroup.targetSubProjectDir + '/' + itemToMove.originalRelativePath;
+                    itemToMove.included = true;
+                    tgtGroup.childModules.push(itemToMove);
+                }
+            }
+
+            // 3. Render and preview
+            renderReorganization(plan);
+            recalculateReorgPreview();
+        }
+
+        function moveModuleToUnassigned(sourceGroupKey, relativePath) {
+            onReorgDrop({
+                preventDefault: () => {},
+                dataTransfer: { getData: () => JSON.stringify({ sourceGroupKey, relativePath }) }
+            }, 'UNASSIGNED');
         }
 
         async function recalculateReorgPreview() {
@@ -2180,7 +2526,7 @@
             }
 
             const confirmMsg = "Êtes-vous certain de vouloir appliquer la réorganisation des modules ?\n\n" +
-                "• Les répertoires de packaging et leurs modules enfants seront déplacés dans les sous-projets cibles.\n" +
+                "• Les répertoires de sous-projets et leurs modules enfants seront déplacés ou créés selon le plan.\n" +
                 "• Le pom.xml parent racine et les pom.xml des sous-projets seront mis à jour.";
 
             if (!confirm(confirmMsg)) {

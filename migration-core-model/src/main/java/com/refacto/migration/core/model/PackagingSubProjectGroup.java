@@ -16,6 +16,10 @@ public record PackagingSubProjectGroup(
         boolean included,
         String status
 ) {
+    public PackagingSubProjectGroup withPackagingArtifactId(String newArtifactId) {
+        return new PackagingSubProjectGroup(newArtifactId, originalPackagingDir, targetSubProjectDir, childModules, included, status);
+    }
+
     public PackagingSubProjectGroup withTargetSubProjectDir(String newTargetDir) {
         return new PackagingSubProjectGroup(packagingArtifactId, originalPackagingDir, newTargetDir, childModules, included, status);
     }
