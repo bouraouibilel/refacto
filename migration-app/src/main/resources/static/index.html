@@ -67,6 +67,11 @@
                     <span>Recharger Analyse</span>
                     <input type="file" id="headerImportFileInput" accept=".json" class="hidden" onchange="handleImportAnalysisFile(event)">
                 </label>
+                <button onclick="toggleHistoryDrawer()" title="Afficher l'historique de toutes les analyses" class="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg shadow-sm transition">
+                    <i data-lucide="history" class="w-4 h-4 text-blue-400"></i>
+                    <span>Historique</span>
+                    <span id="historyCountBadge" class="bg-blue-600 text-[10px] text-white font-bold px-1.5 py-0.5 rounded-full min-w-4 text-center">0</span>
+                </button>
                 <button onclick="openImportModal()" class="inline-flex items-center space-x-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
                     <i data-lucide="folder-plus" class="w-4 h-4"></i>
                     <span>Scanner Projet</span>
@@ -122,6 +127,41 @@
             </button>
         </div>
     </header>
+
+    <!-- Floating Progress Banner for Active / Background Analysis -->
+    <div id="activeAnalysisBanner" class="hidden max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white rounded-2xl p-4 shadow-xl border border-blue-500/30 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3 w-full md:w-auto">
+                <div class="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-400 shrink-0">
+                    <svg class="animate-spin w-5 h-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center space-x-2 flex-wrap">
+                        <span class="font-bold text-sm text-white truncate max-w-xs" id="bannerProjectName">Analyse en cours...</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-300 font-mono font-bold" id="bannerProgressPercent">5%</span>
+                        <span class="text-[11px] text-slate-400 font-mono flex items-center space-x-1">
+                            <i data-lucide="clock" class="w-3 h-3 text-slate-400 inline"></i>
+                            <span id="bannerElapsedTime">00:00</span>
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-300 mt-0.5 font-medium truncate" id="bannerStepLabel">Initialisation de l'analyse...</div>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3 w-full md:w-auto justify-end">
+                <!-- Progress Bar -->
+                <div class="w-full md:w-64 bg-slate-800/80 rounded-full h-2.5 overflow-hidden border border-slate-700/80">
+                    <div id="bannerProgressBar" class="bg-gradient-to-r from-blue-500 via-indigo-500 to-teal-400 h-2.5 rounded-full transition-all duration-300" style="width: 5%"></div>
+                </div>
+                <button onclick="toggleHistoryDrawer()" class="px-3 py-1.5 text-xs font-semibold bg-white/10 hover:bg-white/20 rounded-lg text-slate-200 transition shrink-0 flex items-center space-x-1">
+                    <i data-lucide="history" class="w-3.5 h-3.5"></i>
+                    <span>Historique</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Main Content Area -->
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -928,6 +968,52 @@
         </div>
     </div>
 
+    <!-- Analysis History Slide-over Drawer Backdrop -->
+    <div id="historyDrawerBackdrop" onclick="toggleHistoryDrawer(false)" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-[55] hidden transition-opacity"></div>
+
+    <!-- Analysis History Slide-over Drawer -->
+    <div id="historyDrawer" class="fixed inset-y-0 right-0 max-w-2xl w-full bg-white shadow-2xl z-[60] transform translate-x-full transition-transform duration-300 flex flex-col border-l border-slate-200">
+        <!-- Drawer Header -->
+        <div class="p-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between shadow-sm">
+            <div class="flex items-center space-x-2.5">
+                <div class="p-2 bg-white/10 rounded-xl text-blue-300">
+                    <i data-lucide="history" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm leading-none flex items-center space-x-2">
+                        <span>Historique des Analyses</span>
+                        <span id="historyDrawerCountBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-blue-600 text-white font-mono font-bold">0 analyse(s)</span>
+                    </h3>
+                    <p class="text-[11px] text-slate-300 mt-1">Consultez les analyses passées et basculez instantanément sans relancer le scan</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-1">
+                <button onclick="refreshHistoryList()" title="Actualiser la liste" class="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition">
+                    <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                </button>
+                <button onclick="toggleHistoryDrawer()" title="Fermer" class="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- History List Area -->
+        <div id="historyListContainer" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+            <div class="text-center py-8 text-xs text-slate-400 italic">Chargement de l'historique...</div>
+        </div>
+
+        <!-- Drawer Footer -->
+        <div class="p-3 bg-white border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+            <span class="flex items-center space-x-1.5">
+                <i data-lucide="database" class="w-3.5 h-3.5 text-emerald-600"></i>
+                <span>Persistance locale : <code class="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded">.refacto-history/</code></span>
+            </span>
+            <button onclick="toggleHistoryDrawer()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition">
+                Fermer
+            </button>
+        </div>
+    </div>
+
     <!-- App JavaScript Logic -->
     <script>
         let currentAnalysis = null;
@@ -995,6 +1081,326 @@
             }
         }
 
+        // ==========================================
+        // HISTORY & ASYNC TRACKING SYSTEM
+        // ==========================================
+        let activeTrackingInterval = null;
+        let activeTrackingTimer = null;
+        let activeTrackingAnalysisId = null;
+
+        function formatDuration(ms) {
+            if (!ms || ms <= 0) return '0s';
+            const totalSec = Math.floor(ms / 1000);
+            const min = Math.floor(totalSec / 60);
+            const sec = totalSec % 60;
+            if (min === 0) return `${sec}s`;
+            return `${min}m ${sec < 10 ? '0' : ''}${sec}s`;
+        }
+
+        function formatElapsed(startTimeMs) {
+            if (!startTimeMs) return '00:00';
+            const diff = Math.max(0, Math.floor((Date.now() - startTimeMs) / 1000));
+            const m = Math.floor(diff / 60);
+            const s = diff % 60;
+            return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        function stopTracking() {
+            if (activeTrackingInterval) {
+                clearInterval(activeTrackingInterval);
+                activeTrackingInterval = null;
+            }
+            if (activeTrackingTimer) {
+                clearInterval(activeTrackingTimer);
+                activeTrackingTimer = null;
+            }
+            activeTrackingAnalysisId = null;
+            localStorage.removeItem('refacto_active_analysis_id');
+            const banner = document.getElementById('activeAnalysisBanner');
+            if (banner) banner.classList.add('hidden');
+        }
+
+        function startTrackingAnalysis(summary) {
+            if (!summary || !summary.analysisId) return;
+
+            stopTracking();
+
+            activeTrackingAnalysisId = summary.analysisId;
+            localStorage.setItem('refacto_active_analysis_id', summary.analysisId);
+
+            const banner = document.getElementById('activeAnalysisBanner');
+            const nameEl = document.getElementById('bannerProjectName');
+            const percentEl = document.getElementById('bannerProgressPercent');
+            const timeEl = document.getElementById('bannerElapsedTime');
+            const stepEl = document.getElementById('bannerStepLabel');
+            const barEl = document.getElementById('bannerProgressBar');
+
+            if (banner) banner.classList.remove('hidden');
+            if (nameEl) nameEl.innerText = summary.projectName || "Projet";
+            if (percentEl) percentEl.innerText = `${summary.progressPercent || 5}%`;
+            if (stepEl) stepEl.innerText = summary.currentStep || "Initialisation de l'analyse...";
+            if (barEl) barEl.style.width = `${Math.max(5, summary.progressPercent || 5)}%`;
+
+            document.getElementById('activeProjectLabel').innerText = (summary.projectName || "Projet") + " (Analyse en cours...)";
+
+            const startMs = summary.startTime ? new Date(summary.startTime).getTime() : Date.now();
+            if (timeEl) timeEl.innerText = formatElapsed(startMs);
+
+            activeTrackingTimer = setInterval(() => {
+                if (timeEl) timeEl.innerText = formatElapsed(startMs);
+            }, 1000);
+
+            activeTrackingInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/analyses/${activeTrackingAnalysisId}/status`);
+                    if (res.status === 404) {
+                        console.warn("Analyse introuvable :", activeTrackingAnalysisId);
+                        stopTracking();
+                        return;
+                    }
+                    if (!res.ok) return;
+
+                    const st = await res.json();
+                    if (percentEl) percentEl.innerText = `${st.progressPercent}%`;
+                    if (stepEl) stepEl.innerText = st.currentStep || "Analyse en cours...";
+                    if (barEl) barEl.style.width = `${Math.max(5, st.progressPercent)}%`;
+
+                    if (st.status === 'COMPLETED') {
+                        stopTracking();
+                        await loadAnalysisById(st.analysisId);
+                        await refreshHistoryList();
+                    } else if (st.status === 'FAILED') {
+                        stopTracking();
+                        await refreshHistoryList();
+                        alert("❌ L'analyse a échoué :\n" + (st.errorMessage || "Erreur inconnue"));
+                        document.getElementById('activeProjectLabel').innerText = "Échec de l'analyse";
+                    }
+                } catch (e) {
+                    console.warn("Erreur polling analyse :", e);
+                }
+            }, 2000);
+
+            lucide.createIcons();
+        }
+
+        async function loadAnalysisById(analysisId) {
+            try {
+                const res = await fetch(`/api/analyses/${analysisId}`);
+                if (!res.ok) {
+                    throw new Error("Impossible de charger l'analyse (HTTP " + res.status + ")");
+                }
+                const data = await res.json();
+                loadAnalysis(data);
+                toggleHistoryDrawer(false);
+            } catch (err) {
+                alert("Erreur lors du chargement de l'analyse : " + err.message);
+            }
+        }
+
+        async function deleteAnalysisFromHistory(analysisId, event) {
+            if (event) event.stopPropagation();
+            if (!confirm("Voulez-vous vraiment supprimer cette analyse de l'historique ?")) {
+                return;
+            }
+            try {
+                const res = await fetch(`/api/analyses/${analysisId}`, { method: 'DELETE' });
+                if (!res.ok && res.status !== 204) {
+                    throw new Error("Erreur suppression (HTTP " + res.status + ")");
+                }
+                if (activeTrackingAnalysisId === analysisId) {
+                    stopTracking();
+                }
+                await refreshHistoryList();
+            } catch (err) {
+                alert("Impossible de supprimer l'analyse : " + err.message);
+            }
+        }
+
+        function toggleHistoryDrawer(forceState) {
+            const drawer = document.getElementById('historyDrawer');
+            const backdrop = document.getElementById('historyDrawerBackdrop');
+            if (!drawer) return;
+            const isOpen = !drawer.classList.contains('translate-x-full');
+            const newState = forceState !== undefined ? forceState : !isOpen;
+            if (newState) {
+                drawer.classList.remove('translate-x-full');
+                if (backdrop) backdrop.classList.remove('hidden');
+                refreshHistoryList();
+            } else {
+                drawer.classList.add('translate-x-full');
+                if (backdrop) backdrop.classList.add('hidden');
+            }
+        }
+
+        async function refreshHistoryList() {
+            const container = document.getElementById('historyListContainer');
+            const badge = document.getElementById('historyCountBadge');
+            const drawerBadge = document.getElementById('historyDrawerCountBadge');
+
+            try {
+                const res = await fetch('/api/analyses');
+                if (!res.ok) return;
+                const list = await res.json();
+
+                if (badge) badge.innerText = list.length;
+                if (drawerBadge) drawerBadge.innerText = `${list.length} analyse${list.length > 1 ? 's' : ''}`;
+
+                if (!container) return;
+
+                if (!list || list.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-12 px-4 bg-white rounded-xl border border-dashed border-slate-300">
+                            <i data-lucide="inbox" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
+                            <p class="text-sm font-medium text-slate-600">Aucune analyse enregistrée</p>
+                            <p class="text-xs text-slate-400 mt-1">Lancez une analyse ou le projet démo pour commencer.</p>
+                        </div>
+                    `;
+                    lucide.createIcons();
+                    return;
+                }
+
+                container.innerHTML = list.map(item => {
+                    const isCurrent = currentAnalysis && currentAnalysis.analysisId === item.analysisId;
+                    const isActiveRunning = activeTrackingAnalysisId === item.analysisId || item.status === 'IN_PROGRESS';
+                    const dateStr = item.startTime ? new Date(item.startTime).toLocaleString('fr-FR', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                    }) : 'Date inconnue';
+                    const durationStr = formatDuration(item.durationMs);
+
+                    let statusBadgeHtml = '';
+                    if (item.status === 'IN_PROGRESS') {
+                        statusBadgeHtml = `
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                                <svg class="animate-spin -ml-0.5 mr-1.5 h-3 w-3 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                                </svg>
+                                En cours (${item.progressPercent}%)
+                            </span>
+                        `;
+                    } else if (item.status === 'COMPLETED') {
+                        statusBadgeHtml = `
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <i data-lucide="check-circle-2" class="w-3.5 h-3.5 mr-1 text-emerald-600"></i>
+                                Terminée
+                            </span>
+                        `;
+                    } else {
+                        statusBadgeHtml = `
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-300">
+                                <i data-lucide="alert-triangle" class="w-3.5 h-3.5 mr-1 text-rose-600"></i>
+                                Échec
+                            </span>
+                        `;
+                    }
+
+                    const targetJava = item.targetProfile ? (item.targetProfile.targetJavaVersion || '21') : '21';
+                    const targetBoot = item.targetProfile ? (item.targetProfile.targetSpringBootVersion || '3.3.4') : '3.3.4';
+
+                    return `
+                        <div class="bg-white rounded-xl border ${isCurrent ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'} p-4 shadow-sm hover:shadow-md transition space-y-3">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0">
+                                    <div class="flex items-center space-x-2 flex-wrap">
+                                        <h4 class="font-bold text-slate-900 text-sm truncate">${escapeHtml(item.projectName || 'Projet')}</h4>
+                                        ${isCurrent ? '<span class="text-[10px] uppercase font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">Actif</span>' : ''}
+                                    </div>
+                                    <p class="text-xs text-slate-500 flex items-center space-x-2 mt-0.5">
+                                        <span>${dateStr}</span>
+                                        <span>•</span>
+                                        <span class="font-mono">${durationStr}</span>
+                                        <span>•</span>
+                                        <span class="inline-flex items-center space-x-1">
+                                            <i data-lucide="git-branch" class="w-3 h-3 text-slate-400"></i>
+                                            <span>${escapeHtml(item.branch || 'main')}</span>
+                                        </span>
+                                    </p>
+                                </div>
+                                <div>${statusBadgeHtml}</div>
+                            </div>
+
+                            <div class="text-xs text-slate-600 flex items-center space-x-2 font-mono bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                                <span class="text-slate-400">Cible :</span>
+                                <span class="font-semibold text-slate-700">Java ${escapeHtml(targetJava)}</span>
+                                <span class="text-slate-300">|</span>
+                                <span class="font-semibold text-slate-700">Boot ${escapeHtml(targetBoot)}</span>
+                            </div>
+
+                            ${item.status === 'IN_PROGRESS' ? `
+                                <div class="space-y-1">
+                                    <div class="flex justify-between text-xs text-slate-500">
+                                        <span class="truncate">${escapeHtml(item.currentStep || 'Traitement...')}</span>
+                                        <span class="font-bold font-mono">${item.progressPercent}%</span>
+                                    </div>
+                                    <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                        <div class="bg-blue-600 h-1.5 rounded-full" style="width: ${Math.max(5, item.progressPercent)}%"></div>
+                                    </div>
+                                </div>
+                            ` : ''}
+
+                            ${item.status === 'COMPLETED' ? `
+                                <div class="grid grid-cols-4 gap-1.5 text-center text-xs">
+                                    <div class="bg-slate-50 border border-slate-100 p-1.5 rounded-lg">
+                                        <div class="font-bold text-slate-800">${item.modulesCount}</div>
+                                        <div class="text-[10px] text-slate-400">Modules</div>
+                                    </div>
+                                    <div class="bg-indigo-50/50 border border-indigo-100/50 p-1.5 rounded-lg">
+                                        <div class="font-bold text-indigo-700">${item.batchesCount}</div>
+                                        <div class="text-[10px] text-indigo-400">Batches</div>
+                                    </div>
+                                    <div class="bg-amber-50/50 border border-amber-100/50 p-1.5 rounded-lg">
+                                        <div class="font-bold text-amber-700">${item.findingsCount}</div>
+                                        <div class="text-[10px] text-amber-400">Findings</div>
+                                    </div>
+                                    <div class="bg-rose-50/50 border border-rose-100/50 p-1.5 rounded-lg">
+                                        <div class="font-bold text-rose-700">${item.riskScore}/100</div>
+                                        <div class="text-[10px] text-rose-400">Risque</div>
+                                    </div>
+                                </div>
+                            ` : ''}
+
+                            ${item.status === 'FAILED' && item.errorMessage ? `
+                                <div class="text-xs text-rose-700 bg-rose-50 border border-rose-200 p-2 rounded-lg font-mono">
+                                    ${escapeHtml(item.errorMessage)}
+                                </div>
+                            ` : ''}
+
+                            <div class="pt-2 border-t border-slate-100 flex items-center justify-between">
+                                <div class="text-[11px] text-slate-400 font-mono truncate max-w-xs" title="${escapeHtml(item.projectPath || '')}">
+                                    ${escapeHtml(item.projectPath || '')}
+                                </div>
+                                <div class="flex items-center space-x-2 shrink-0">
+                                    <button onclick="deleteAnalysisFromHistory('${item.analysisId}', event)" title="Supprimer de l'historique" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                    ${item.status === 'COMPLETED' ? `
+                                        <button onclick="loadAnalysisById('${item.analysisId}')" class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shadow-sm transition">
+                                            <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
+                                            <span>${isCurrent ? 'Réafficher' : 'Charger'}</span>
+                                        </button>
+                                    ` : ''}
+                                    ${item.status === 'IN_PROGRESS' ? `
+                                        <button onclick="startTrackingAnalysis({ analysisId: '${item.analysisId}', projectName: '${escapeHtml(item.projectName || '')}', startTime: '${item.startTime || ''}', progressPercent: ${item.progressPercent || 5}, currentStep: '${escapeHtml(item.currentStep || '')}' }); toggleHistoryDrawer(false);" class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg shadow-sm transition">
+                                            <i data-lucide="play" class="w-3.5 h-3.5"></i>
+                                            <span>Suivre</span>
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                lucide.createIcons();
+            } catch (err) {
+                console.error("Erreur chargement historique :", err);
+                if (container) {
+                    container.innerHTML = `<div class="p-4 text-xs text-rose-500 text-center">Erreur lors du chargement de l'historique</div>`;
+                }
+            }
+        }
+
         async function startAnalysis() {
             const name = document.getElementById('importProjectName').value.trim() || "Application Java";
             let path = document.getElementById('importProjectPath').value.trim();
@@ -1030,8 +1436,8 @@
                 }
                 const project = await projRes.json();
 
-                // 2. Launch analysis with TargetProfile options
-                const anaRes = await fetch(`/api/projects/${project.id}/analyses`, {
+                // 2. Launch analysis with TargetProfile options (async=true for non-blocking execution)
+                const anaRes = await fetch(`/api/projects/${project.id}/analyses?async=true`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1044,8 +1450,13 @@
                     const err = await anaRes.json().catch(() => ({ message: anaRes.statusText }));
                     throw new Error(err.message || "Erreur lors de l'exécution de l'analyse");
                 }
-                const analysis = await anaRes.json();
-                loadAnalysis(analysis);
+                const summaryOrContext = await anaRes.json();
+                if (summaryOrContext.status === 'IN_PROGRESS' || anaRes.status === 202) {
+                    startTrackingAnalysis(summaryOrContext);
+                } else {
+                    loadAnalysis(summaryOrContext);
+                }
+                refreshHistoryList();
             } catch (err) {
                 alert("Erreur lors de l'analyse : " + err.message);
                 document.getElementById('activeProjectLabel').innerText = "Erreur d'analyse";
@@ -1059,7 +1470,7 @@
             updateTargetBadge(targetJavaVersion, targetSpringBootVersion);
 
             try {
-                const anaRes = await fetch('/api/projects/demo', {
+                const anaRes = await fetch('/api/projects/demo?async=true', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ targetJavaVersion, targetSpringBootVersion })
@@ -1068,8 +1479,13 @@
                     const err = await anaRes.json().catch(() => ({ message: anaRes.statusText }));
                     throw new Error(err.message || "Erreur lors du chargement de la démo");
                 }
-                const analysis = await anaRes.json();
-                loadAnalysis(analysis);
+                const summaryOrContext = await anaRes.json();
+                if (summaryOrContext.status === 'IN_PROGRESS' || anaRes.status === 202) {
+                    startTrackingAnalysis(summaryOrContext);
+                } else {
+                    loadAnalysis(summaryOrContext);
+                }
+                refreshHistoryList();
             } catch (err) {
                 alert("Erreur lors du chargement de la démo : " + err.message);
                 document.getElementById('activeProjectLabel').innerText = "Erreur démo";
@@ -1129,6 +1545,9 @@
             renderDdd(data.dddPlan);
             renderReorganization(data.moduleReorganizationPlan);
             loadRecipes();
+            if (data.analysisId) {
+                localStorage.setItem('refacto_last_loaded_id', data.analysisId);
+            }
 
             lucide.createIcons();
         }
@@ -2988,6 +3407,30 @@
 
         async function checkAndLoadLatestAnalysis() {
             try {
+                // Initialize history badges and drawer contents
+                await refreshHistoryList();
+
+                // 1. Check if an analysis was currently active in this browser session
+                const activeId = localStorage.getItem('refacto_active_analysis_id');
+                if (activeId) {
+                    try {
+                        const statusRes = await fetch(`/api/analyses/${activeId}/status`);
+                        if (statusRes.ok) {
+                            const summary = await statusRes.json();
+                            if (summary.status === 'IN_PROGRESS') {
+                                startTrackingAnalysis(summary);
+                                return;
+                            } else if (summary.status === 'COMPLETED') {
+                                await loadAnalysisById(activeId);
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Erreur reconnexion analyse active :", e);
+                    }
+                }
+
+                // 2. Fallback to latest analysis completed on server
                 const res = await fetch('/api/analyses/latest');
                 if (res.ok && res.status === 200) {
                     const data = await res.json();

@@ -20,11 +20,29 @@ public class AnalysisController {
         this.orchestrator = orchestrator;
     }
 
+    @GetMapping
+    public ResponseEntity<List<AnalysisSummary>> listAnalyses() {
+        return ResponseEntity.ok(orchestrator.listAnalysisSummaries());
+    }
+
     @GetMapping("/latest")
     public ResponseEntity<MigrationOrchestratorService.AnalysisContext> getLatestAnalysis() {
         return orchestrator.getLatestAnalysis()
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.noContent().build());
+    }
+
+    @GetMapping("/{id}/status")
+    public ResponseEntity<AnalysisSummary> getAnalysisStatus(@PathVariable String id) {
+        return orchestrator.getAnalysisSummary(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteAnalysis(@PathVariable String id) {
+        boolean deleted = orchestrator.deleteAnalysis(id);
+        return deleted ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
     @GetMapping("/{id}")

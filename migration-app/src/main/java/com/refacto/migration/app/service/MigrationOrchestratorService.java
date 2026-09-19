@@ -18,6 +18,9 @@ import com.refacto.migration.transformation.DryRunService;
 import com.refacto.migration.transformation.ModuleReorganizationService;
 import com.refacto.migration.transformation.TransformationApplierService;
 import com.refacto.migration.validation.BuildValidationService;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,6 +31,9 @@ import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 /**
  * Orchestrateur central de la plateforme de migration (Section 7 : Workflow global).
@@ -59,6 +65,12 @@ public class MigrationOrchestratorService {
     // In-memory state store for analyses and campaigns
     private final Map<String, Project> projects = new ConcurrentHashMap<>();
     private final Map<String, AnalysisContext> analyses = new ConcurrentHashMap<>();
+    private final Map<String, AnalysisSummary> analysisSummaries = new ConcurrentHashMap<>();
+    private final ExecutorService analysisExecutor = Executors.newCachedThreadPool();
+    private final ObjectMapper jsonMapper = new ObjectMapper()
+            .findAndRegisterModules()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    private static final Path HISTORY_DIR = Paths.get(".refacto-history");
 
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public record AnalysisContext(
@@ -80,6 +92,64 @@ public class MigrationOrchestratorService {
             ModuleReorganizationPlan moduleReorganizationPlan
     ) {}
 
+    @PostConstruct
+    public void loadPersistedAnalyses() {
+        try {
+            if (Files.exists(HISTORY_DIR) && Files.isDirectory(HISTORY_DIR)) {
+                try (var stream = Files.list(HISTORY_DIR)) {
+                    for (Path file : stream.filter(p -> p.toString().endsWith(".json")).toList()) {
+                        try {
+                            AnalysisContext ctx = jsonMapper.readValue(file.toFile(), AnalysisContext.class);
+                            if (ctx != null && ctx.analysisId() != null) {
+                                analyses.put(ctx.analysisId(), ctx);
+                                if (ctx.project() != null) {
+                                    projects.put(ctx.project().id(), ctx.project());
+                                }
+                                Instant fileTime = Files.getLastModifiedTime(file).toInstant();
+                                AnalysisSummary summary = new AnalysisSummary(
+                                        ctx.analysisId(),
+                                        ctx.project() != null ? ctx.project().id() : "unknown",
+                                        ctx.project() != null ? ctx.project().name() : "Projet",
+                                        ctx.project() != null ? ctx.project().repositoryUri() : "",
+                                        ctx.project() != null ? ctx.project().branch() : "main",
+                                        fileTime,
+                                        fileTime,
+                                        null,
+                                        "COMPLETED",
+                                        "Analyse terminée (restaurée depuis l'historique)",
+                                        100,
+                                        ctx.modules() != null ? ctx.modules().size() : 0,
+                                        ctx.batches() != null ? ctx.batches().size() : 0,
+                                        ctx.findings() != null ? ctx.findings().size() : 0,
+                                        ctx.riskAssessment() != null ? ctx.riskAssessment().score() : 0,
+                                        null,
+                                        ctx.targetProfile()
+                                );
+                                analysisSummaries.put(ctx.analysisId(), summary);
+                            }
+                        } catch (Exception e) {
+                            log.warn("Impossible de recharger l'analyse depuis {} : {}", file, e.getMessage());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Erreur lors de la lecture du dossier d'historique {} : {}", HISTORY_DIR, e.getMessage());
+        }
+    }
+
+    private void persistAnalysisContext(AnalysisContext context) {
+        try {
+            if (!Files.exists(HISTORY_DIR)) {
+                Files.createDirectories(HISTORY_DIR);
+            }
+            Path targetFile = HISTORY_DIR.resolve(context.analysisId() + ".json");
+            jsonMapper.writerWithDefaultPrettyPrinter().writeValue(targetFile.toFile(), context);
+            log.info("Analyse {} persistée avec succès dans {}", context.analysisId(), targetFile);
+        } catch (Exception e) {
+            log.warn("Échec de persistance de l'analyse {} : {}", context.analysisId(), e.getMessage());
+        }
+    }
 
     public Project registerProject(String name, String localPathOrUri, String branch) {
         String id = UUID.randomUUID().toString().substring(0, 8);
@@ -96,12 +166,74 @@ public class MigrationOrchestratorService {
         return Optional.ofNullable(projects.get(projectId));
     }
 
+    /**
+     * Démarre une analyse en arrière-plan (asynchrone) et renvoie immédiatement son statut initial.
+     */
+    public AnalysisSummary startAnalysisAsync(String projectId, TargetProfile targetProfile) {
+        Project project = projects.get(projectId);
+        if (project == null) {
+            throw new IllegalArgumentException("Projet introuvable : " + projectId);
+        }
+        final TargetProfile resolvedProfile = (targetProfile != null) ? targetProfile : TargetProfile.defaultJava17Profile();
+        String analysisId = UUID.randomUUID().toString().substring(0, 8);
+
+        AnalysisSummary initialSummary = AnalysisSummary.inProgress(
+                analysisId,
+                project.id(),
+                project.name(),
+                project.repositoryUri(),
+                project.branch(),
+                resolvedProfile
+        );
+        analysisSummaries.put(analysisId, initialSummary);
+
+        analysisExecutor.submit(() -> {
+            try {
+                runFullAnalysisCore(analysisId, project, resolvedProfile, summary -> analysisSummaries.put(analysisId, summary));
+            } catch (Exception e) {
+                log.error("Erreur lors de l'exécution asynchrone de l'analyse {} : {}", analysisId, e.getMessage(), e);
+                analysisSummaries.put(analysisId, initialSummary.failed(e.getMessage()));
+            }
+        });
+
+        return initialSummary;
+    }
+
+    /**
+     * Exécute l'analyse de manière synchrone (bloquante jusqu'à complétion) tout en alimentant l'historique.
+     */
     public AnalysisContext runFullAnalysis(String projectId, TargetProfile targetProfile) {
         Project project = projects.get(projectId);
         if (project == null) {
             throw new IllegalArgumentException("Projet introuvable : " + projectId);
         }
+        TargetProfile resolvedProfile = (targetProfile != null) ? targetProfile : TargetProfile.defaultJava17Profile();
+        String analysisId = UUID.randomUUID().toString().substring(0, 8);
 
+        AnalysisSummary initialSummary = AnalysisSummary.inProgress(
+                analysisId,
+                project.id(),
+                project.name(),
+                project.repositoryUri(),
+                project.branch(),
+                resolvedProfile
+        );
+        analysisSummaries.put(analysisId, initialSummary);
+
+        try {
+            return runFullAnalysisCore(analysisId, project, resolvedProfile, summary -> analysisSummaries.put(analysisId, summary));
+        } catch (Exception e) {
+            analysisSummaries.put(analysisId, initialSummary.failed(e.getMessage()));
+            throw e;
+        }
+    }
+
+    private AnalysisContext runFullAnalysisCore(
+            String analysisId,
+            Project project,
+            TargetProfile targetProfile,
+            Consumer<AnalysisSummary> progressConsumer
+    ) {
         Path rootPath = Paths.get(project.repositoryUri());
         if (!Files.exists(rootPath)) {
             Path fallback = Paths.get("..").resolve(project.repositoryUri()).normalize();
@@ -112,27 +244,41 @@ public class MigrationOrchestratorService {
                         " (chemin absolu testé : " + rootPath.toAbsolutePath() + ")");
             }
         }
-        log.info("Lancement de l'analyse complète pour {} sur {}", project.name(), rootPath);
+        log.info("Lancement de l'analyse complète [{}] pour {} sur {}", analysisId, project.name(), rootPath);
 
-        if (targetProfile == null) {
-            targetProfile = TargetProfile.defaultJava17Profile();
+        AnalysisSummary currentSummary = analysisSummaries.get(analysisId);
+
+        // Étape 1 : Découverte des modules Maven (15%)
+        if (progressConsumer != null && currentSummary != null) {
+            currentSummary = currentSummary.withProgress("Découverte des modules Maven & architecture racine...", 15);
+            progressConsumer.accept(currentSummary);
         }
-
-        // 1. Project Discovery
         RepositorySnapshot snapshot = projectDiscovery.discoverSnapshot(rootPath, project.branch(), project.currentCommit());
         List<ModuleDescriptor> modules = projectDiscovery.discoverModules(rootPath);
 
-        // 2. Spring Batch Discovery
+        // Étape 2 : Découverte des Batchs Spring (25%)
+        if (progressConsumer != null && currentSummary != null) {
+            currentSummary = currentSummary.withProgress("Détection et analyse des jobs Spring Batch...", 25);
+            progressConsumer.accept(currentSummary);
+        }
         List<BatchDescriptor> batches = new ArrayList<>();
         for (ModuleDescriptor mod : modules) {
             Path modDir = rootPath.resolve(mod.relativePath());
             batches.addAll(batchDiscovery.discoverBatches(rootPath, mod.artifactId(), modDir));
         }
 
-        // 3. Dependency Analysis
+        // Étape 3 : Inventaire des dépendances (35%)
+        if (progressConsumer != null && currentSummary != null) {
+            currentSummary = currentSummary.withProgress("Cartographie des dépendances et compatibilités cibles...", 35);
+            progressConsumer.accept(currentSummary);
+        }
         List<Dependency> dependencies = dependencyAnalyzer.buildInventory(modules, targetProfile);
 
-        // 4. Code & SQL Analysis (Findings)
+        // Étape 4 : Analyse du code Java (AST JavaParser) & requêtes SQL (55%)
+        if (progressConsumer != null && currentSummary != null) {
+            currentSummary = currentSummary.withProgress("Analyse statique approfondie AST (JavaParser) & requêtes SQL...", 55);
+            progressConsumer.accept(currentSummary);
+        }
         List<Finding> findings = new ArrayList<>();
         for (ModuleDescriptor mod : modules) {
             Path modDir = rootPath.resolve(mod.relativePath());
@@ -140,30 +286,48 @@ public class MigrationOrchestratorService {
             findings.addAll(sqlAnalyzer.analyzeModule(rootPath, mod.artifactId(), modDir));
         }
 
-        // 5. Architecture Analysis
+        // Étape 5 : Analyse des couplages architecturaux (70%)
+        if (progressConsumer != null && currentSummary != null) {
+            currentSummary = currentSummary.withProgress("Calcul des métriques de couplage architectural...", 70);
+            progressConsumer.accept(currentSummary);
+        }
         ArchitectureAnalyzerService.ArchitectureAnalysisResult archResult =
                 architectureAnalyzer.analyzeArchitecture(rootPath, modules, batches);
         findings.addAll(archResult.findings());
 
-        // 6. Risk Scoring
+        // Étape 6 : Évaluation des risques & DAG de migration (80%)
+        if (progressConsumer != null && currentSummary != null) {
+            currentSummary = currentSummary.withProgress("Évaluation du score de risque et séquencement DAG des vagues...", 80);
+            progressConsumer.accept(currentSummary);
+        }
         RiskAssessment riskAssessment = riskScoring.assessRisk(modules, dependencies, findings);
-
-        // 7. Migration Plan (Waves)
         List<MigrationWave> waves = dagPlanner.buildMigrationWaves(recipeCatalog.getAllRecipes());
 
-        // 8. Dry Run
+        // Étape 7 : Simulation Dry Run (85%)
+        if (progressConsumer != null && currentSummary != null) {
+            currentSummary = currentSummary.withProgress("Simulation Dry Run et calcul des diffs unifiés...", 85);
+            progressConsumer.accept(currentSummary);
+        }
         int totalFiles = modules.stream().mapToInt(ModuleDescriptor::sourceCount).sum();
         DryRunResult dryRunResult = dryRunService.executeDryRun(rootPath, findings, totalFiles);
 
-        // 9. DDD Architecture & Modular Composition Plan
+        // Étape 8 : Plan architectural DDD (90%)
+        if (progressConsumer != null && currentSummary != null) {
+            currentSummary = currentSummary.withProgress("Modélisation de l'architecture DDD et Bounded Contexts...", 90);
+            progressConsumer.accept(currentSummary);
+        }
         DddRefactoringPlan dddPlan = dddRefactoringService.buildRefactoringPlan(
                 rootPath, modules, batches, archResult.couplings()
         );
 
-        // 10. Module & Packaging Reorganization Plan
+        // Étape 9 : Restructuration modulaire & packaging (95%)
+        if (progressConsumer != null && currentSummary != null) {
+            currentSummary = currentSummary.withProgress("Plan de réorganisation modulaire et spécialisation des communs...", 95);
+            progressConsumer.accept(currentSummary);
+        }
         ModuleReorganizationPlan moduleReorgPlan = moduleReorganizationService.analyzeReorganization(rootPath, modules);
 
-        String analysisId = UUID.randomUUID().toString().substring(0, 8);
+        // Étape 10 : Finalisation & persistance (100%)
         AnalysisContext context = new AnalysisContext(
                 analysisId,
                 project,
@@ -184,11 +348,51 @@ public class MigrationOrchestratorService {
         );
 
         analyses.put(analysisId, context);
-        log.info("Analyse {} terminée : {} modules, {} batchs, {} findings, risque {}",
+
+        if (currentSummary != null) {
+            AnalysisSummary completedSummary = currentSummary.completed(
+                    modules.size(),
+                    batches.size(),
+                    findings.size(),
+                    riskAssessment.score()
+            );
+            analysisSummaries.put(analysisId, completedSummary);
+            if (progressConsumer != null) {
+                progressConsumer.accept(completedSummary);
+            }
+        }
+
+        persistAnalysisContext(context);
+
+        log.info("Analyse {} terminée avec succès : {} modules, {} batchs, {} findings, risque {}",
                 analysisId, modules.size(), batches.size(), findings.size(), riskAssessment.score());
 
         return context;
+    }
 
+    public List<AnalysisSummary> listAnalysisSummaries() {
+        return analysisSummaries.values().stream()
+                .sorted(Comparator.comparing(AnalysisSummary::startTime, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+    }
+
+    public Optional<AnalysisSummary> getAnalysisSummary(String analysisId) {
+        return Optional.ofNullable(analysisSummaries.get(analysisId));
+    }
+
+    public boolean deleteAnalysis(String analysisId) {
+        analyses.remove(analysisId);
+        analysisSummaries.remove(analysisId);
+        try {
+            Path file = HISTORY_DIR.resolve(analysisId + ".json");
+            if (Files.exists(file)) {
+                Files.delete(file);
+            }
+            return true;
+        } catch (Exception e) {
+            log.warn("Impossible de supprimer le fichier d'analyse {} : {}", analysisId, e.getMessage());
+            return false;
+        }
     }
 
     public Optional<AnalysisContext> getAnalysis(String analysisId) {
@@ -196,7 +400,12 @@ public class MigrationOrchestratorService {
     }
 
     public Optional<AnalysisContext> getLatestAnalysis() {
-        return analyses.values().stream().reduce((first, second) -> second);
+        return listAnalysisSummaries().stream()
+                .filter(s -> "COMPLETED".equalsIgnoreCase(s.status()))
+                .map(s -> analyses.get(s.analysisId()))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .or(() -> analyses.values().stream().reduce((first, second) -> second));
     }
 
     public AnalysisContext importAnalysis(AnalysisContext importedCtx) {
@@ -207,6 +416,29 @@ public class MigrationOrchestratorService {
             projects.put(importedCtx.project().id(), importedCtx.project());
         }
         analyses.put(importedCtx.analysisId(), importedCtx);
+
+        AnalysisSummary summary = new AnalysisSummary(
+                importedCtx.analysisId(),
+                importedCtx.project() != null ? importedCtx.project().id() : "unknown",
+                importedCtx.project() != null ? importedCtx.project().name() : "Projet importé",
+                importedCtx.project() != null ? importedCtx.project().repositoryUri() : "",
+                importedCtx.project() != null ? importedCtx.project().branch() : "main",
+                Instant.now(),
+                Instant.now(),
+                0L,
+                "COMPLETED",
+                "Analyse importée",
+                100,
+                importedCtx.modules() != null ? importedCtx.modules().size() : 0,
+                importedCtx.batches() != null ? importedCtx.batches().size() : 0,
+                importedCtx.findings() != null ? importedCtx.findings().size() : 0,
+                importedCtx.riskAssessment() != null ? importedCtx.riskAssessment().score() : 0,
+                null,
+                importedCtx.targetProfile()
+        );
+        analysisSummaries.put(importedCtx.analysisId(), summary);
+        persistAnalysisContext(importedCtx);
+
         log.info("Analyse {} importée avec succès (Projet: {})",
                 importedCtx.analysisId(),
                 importedCtx.project() != null ? importedCtx.project().name() : "N/A");

@@ -19,3 +19,7 @@ logs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Analysis History Cache
+.refacto-history/
+**/.refacto-history/

@@ -48,12 +48,16 @@ public class ProjectController {
     }
 
     @PostMapping("/demo")
-    public ResponseEntity<MigrationOrchestratorService.AnalysisContext> runDemoAnalysis(
-            @RequestBody(required = false) RunAnalysisRequest request
+    public ResponseEntity<?> runDemoAnalysis(
+            @RequestBody(required = false) RunAnalysisRequest request,
+            @RequestParam(defaultValue = "false") boolean async
     ) {
         Path samplePath = resolveDemoPath();
         Project project = orchestrator.registerProject("Sample Legacy APP", samplePath.toAbsolutePath().toString(), "main");
         TargetProfile profile = request != null ? request.toTargetProfile() : TargetProfile.java21Profile();
+        if (async) {
+            return ResponseEntity.accepted().body(orchestrator.startAnalysisAsync(project.id(), profile));
+        }
         MigrationOrchestratorService.AnalysisContext context = orchestrator.runFullAnalysis(project.id(), profile);
         return ResponseEntity.ok(context);
     }
@@ -96,11 +100,15 @@ public class ProjectController {
     }
 
     @PostMapping("/{id}/analyses")
-    public ResponseEntity<MigrationOrchestratorService.AnalysisContext> runAnalysis(
+    public ResponseEntity<?> runAnalysis(
             @PathVariable String id,
-            @RequestBody(required = false) RunAnalysisRequest request
+            @RequestBody(required = false) RunAnalysisRequest request,
+            @RequestParam(defaultValue = "false") boolean async
     ) {
         TargetProfile profile = request != null ? request.toTargetProfile() : TargetProfile.java21Profile();
+        if (async) {
+            return ResponseEntity.accepted().body(orchestrator.startAnalysisAsync(id, profile));
+        }
         MigrationOrchestratorService.AnalysisContext context = orchestrator.runFullAnalysis(id, profile);
         return ResponseEntity.ok(context);
     }
